@@ -35,6 +35,13 @@ correct_6800_area = function(
   # Read in data
   xlsxdat <- read_6800_xlsx(file_path)
 
+  # A file with no data rows can't be recalculated (transform() errors on a
+  # 0-row data frame) - leave it as-is and let the caller (tidy_gasxchg)
+  # detect and drop it
+  if (nrow(xlsxdat) == 0) {
+    return(xlsxdat)
+  }
+
   # Correct the area
   xlsxdat_corrected <- xlsxdat |>
     transform(Const.S = set_units(corrected_area, "cm^2")) |>
@@ -66,7 +73,11 @@ correct_6800_area = function(
 #'   \code{\link{correct_6800_area}}, or \code{NULL}/\code{NA} to use the
 #'   file's own embedded leaf area unmodified
 #'
-#' @return A tidied data frame with a fixed set of ESS-DIVE-style columns
+#' @return A tidied data frame with a fixed set of ESS-DIVE-style columns, or
+#'   \code{NULL} (with a warning) if \code{path} has no data rows - callers
+#'   using \code{bind_rows()}/\code{lapply()}/\code{mapply()} over multiple
+#'   paths can pass the result straight through, since \code{bind_rows()}
+#'   silently drops \code{NULL} list elements
 #' @export
 tidy_gasxchg = function(
   path,
@@ -81,6 +92,14 @@ tidy_gasxchg = function(
     } else {
       correct_6800_area(path, area_correction)
     }
+
+  # Some raw files have no data rows (e.g. a curve that was started and
+  # immediately aborted); skip them rather than erroring, so a single empty
+  # file doesn't take down a whole batch of bind_rows()/mapply() calls
+  if (nrow(df) == 0) {
+    warning("Skipping ", path, ": file contains no data rows", call. = FALSE)
+    return(NULL)
+  }
 
   # Filter out replicated columns, and metadata columns that collide with
   # another column once group prefixes are stripped below (e.g. both
