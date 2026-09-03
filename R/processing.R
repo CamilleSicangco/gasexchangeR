@@ -82,13 +82,18 @@ tidy_gasxchg = function(
       correct_6800_area(path, area_correction)
     }
 
-  # Filter out replicated columns
+  # Filter out replicated columns, and metadata columns that collide with
+  # another column once group prefixes are stripped below (e.g. both
+  # TGA_iso.Version and gasanalyzer.Version become "Version"). any_of()
+  # rather than a plain vector so a file missing an optional module's
+  # columns (e.g. no TGA_iso attachment) doesn't error out here.
   df <- df |>
-    select(!c(
+    select(!any_of(c(
       "SysConst.AvgTime","GasEx.Time", "Meas.Time","MchEvent.Time",
       "MchEvent.HHMMSS",
-      "Raw.H2Oa", "Raw.H2Or"
-    ))
+      "Raw.H2Oa", "Raw.H2Or",
+      "TGA_iso.Version", "gasanalyzer.Version"
+    )))
 
   # Remove column categories
   names(df) = gsub(".*\\.","", names(df))
