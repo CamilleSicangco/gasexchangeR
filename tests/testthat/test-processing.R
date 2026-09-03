@@ -30,20 +30,18 @@ test_that("add_species also accepts a 2-column data frame lookup", {
 
 # The fixture file lacks embedded factory calibration data (a characteristic
 # of this particular raw export, not of tidy_gasxchg()), which gasanalyzer
-# warns about -- expected and harmless for what this test checks (filename
-# parsing, column presence), so it's asserted explicitly rather than left as
-# a stray warning.
+# warns about once per R session ("No further warnings will be displayed!")
+# -- harmless for what this test checks (filename parsing, column presence),
+# but since whether it actually fires depends on prior calls made earlier in
+# the same session, it's suppressed rather than required via expect_warning().
 test_that("tidy_gasxchg parses A-Ci filename metadata correctly", {
   withr::local_dir(test_path("fixtures"))
 
-  expect_warning(
-    df <- tidy_gasxchg(
-      "data/in/raw/20260504/dipe_700m_rep1_aci_25C.xlsx",
-      type = "ACi",
-      area_correction = NA
-    ),
-    "factory calibration"
-  )
+  df = suppressWarnings(tidy_gasxchg(
+    "data/in/raw/20260504/dipe_700m_rep1_aci_25C.xlsx",
+    type = "ACi",
+    area_correction = NA
+  ))
 
   expect_true(nrow(df) > 0)
   expect_equal(unique(df$curve_ID), "dipe_700m_rep1_aci_25C")
