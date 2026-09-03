@@ -28,22 +28,21 @@ test_that("add_species also accepts a 2-column data frame lookup", {
   expect_equal(out$species, c("Argyrodendron actinophyllum", "Orites excelsa"))
 })
 
-# The tests below require reading real LI-6800 .xlsx fixtures via
-# gasanalyzer::read_6800_xlsx(), which in turn depends on tidyxl. As of
-# writing, xlsx reading crashes R entirely in the development environment
-# (reproduced with tidyxl::xlsx_cells() and readxl::read_excel() on a
-# trivial, freshly-generated .xlsx file, under both R 4.5.2 and R 4.3.1) --
-# an apparent system-level issue unrelated to this package. These tests are
-# believed correct but could not be executed/verified here; please confirm
-# they pass in an environment where xlsx reading works.
+# The fixture file lacks embedded factory calibration data (a characteristic
+# of this particular raw export, not of tidy_gasxchg()), which gasanalyzer
+# warns about -- expected and harmless for what this test checks (filename
+# parsing, column presence), so it's asserted explicitly rather than left as
+# a stray warning.
 test_that("tidy_gasxchg parses A-Ci filename metadata correctly", {
-  skip("xlsx reading crashes R in the current dev environment (see comment above) -- remove this skip() once verified to work")
   withr::local_dir(test_path("fixtures"))
 
-  df = tidy_gasxchg(
-    "data/in/raw/20260504/dipe_700m_rep1_aci_25C.xlsx",
-    type = "ACi",
-    area_correction = NA
+  expect_warning(
+    df <- tidy_gasxchg(
+      "data/in/raw/20260504/dipe_700m_rep1_aci_25C.xlsx",
+      type = "ACi",
+      area_correction = NA
+    ),
+    "factory calibration"
   )
 
   expect_true(nrow(df) > 0)
@@ -57,7 +56,6 @@ test_that("tidy_gasxchg parses A-Ci filename metadata correctly", {
 })
 
 test_that("tidy_gasxchg negates A into Rdark for R-T curves", {
-  skip("xlsx reading crashes R in the current dev environment (see comment above) -- remove this skip() once verified to work")
   withr::local_dir(test_path("fixtures"))
 
   df = tidy_gasxchg(
