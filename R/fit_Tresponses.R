@@ -319,6 +319,52 @@ fitRvT_Ea <- function(dataresp)
   }
 }
 
+#' Fit a mixed-model quadratic-in-log Arrhenius model to respiration vs. leaf temperature
+#'
+#' Adapted from Heskel et al. 2016. Fits \code{log(R) ~ Tleaf + Tleaf^2} with
+#' a per-\code{replicate} (here, \code{sample}) random effect on the
+#' intercept via \code{\link[lme4]{lmer}}, then back-transforms to
+#' \code{Rdark} at 25 deg C. Distinct from \code{\link{fitRvT_Ea}} (a
+#' Drake et al. 2015 Arrhenius \code{nls} fit with no random effect) —
+#' the two use different models and different required columns.
+#'
+#' @param df A data frame with columns \code{R}, \code{sample}, and
+#'   \code{Tleaf} (deg C), with one row per respiration measurement
+#'
+#' @return A named numeric vector: \code{a}/\code{b}/\code{c} (fixed-effect
+#'   coefficients and their standard errors), \code{Rdark25}/\code{Rdark25.se},
+#'   \code{r2}, and \code{Tleaf_min}/\code{Tleaf_max}
+#' @export
+fitRvT <- function(df)
+{
+  df = df |>
+    filter(Tleaf < 50) |>
+    mutate(ln_R = log(R), Tleaf2 = Tleaf^2)
+
+  try(
+    Rd <- lmer(
+      ln_R ~ Tleaf + Tleaf2 + (1 | sample),
+      df)
+  )
+  R.1 = summary(Rd)
+  results <- (R.1$coefficients[1:6])
+
+  Rdark25 = exp(results[1] + results[2] * 25 + results[3] * 25^2)
+  Rdark25.se = sqrt((results[4])^2 + (results[5] * 25)^2 + (results[3] * 25^2)^2) * Rdark25
+
+  r <- cor(fitted(Rd), df$R)
+  r2 <- r*r
+
+  Tleaf_min = min(df$Tleaf)
+  Tleaf_max = max(df$Tleaf)
+
+  results = c(results, Rdark25, Rdark25.se, r2, Tleaf_min, Tleaf_max)
+
+  names(results)[1:11] <- c("a","b","c","a.se","b.se","c.se", "Rdark25", "Rdark25.se", "r2", "Tleaf_min", "Tleaf_max")
+
+  return(results)
+}
+
 #' Temperature span for a target fraction of Aopt
 #'
 #' Solves the quadratic Topt model
@@ -356,8 +402,8 @@ solve_Tspan = function(Aopt, Topt, b, span = 0.8)
 #'   (matched against \code{df$par})
 #' @param y Response column name in \code{df}
 #' @param df A data frame of temperature-response fits (when \code{x ==
-#'   "MAT"}) or sensitivity-analysis results (otherwise, see
-#'   \code{\link{run_sensitivity_analysis}})
+#'   "MAT"}) or, for a consuming project's own sensitivity-analysis results
+#'   (otherwise), a data frame with a \code{par} column matching \code{x}
 #'
 #' @return A named character/numeric vector: \code{x}, \code{y}, fitted
 #'   \code{intercept}, and fitted \code{slope}
@@ -381,303 +427,6 @@ fit_regression = function(
   out[3:4] = as.numeric(out[3:4])
 
   return(out)
-}
-
-#' Sensitivity of assimilation's Topt to one Vcmax/Jmax parameter
-#'
-#' Perturbs a single Vcmax or Jmax temperature-response parameter to a test
-#' value, recomputes net assimilation across the curve's measured
-#' temperatures, and refits the quadratic Topt model to estimate how much
-#' the perturbation shifts the Topt of Rubisco-limited (\code{Ac}),
-#' RuBP-regeneration-limited (\code{Aj}), and net (\code{An}) assimilation.
-#'
-#' @param Tresp_fits A one-row data frame of fitted temperature-response
-#'   parameters for one sample (e.g. \code{Vcmax25}, \code{EaV},
-#'   \code{delsV}, \code{Jmax25}, \code{EaJ}, \code{delsJ})
-#' @param ACi_params A data frame of fitted A-Ci curve parameters for the
-#'   same sample (e.g. from \code{\link{extract_curve_params}})
-#' @param par Which parameter to perturb: one of \code{"EaV"},
-#'   \code{"delsV"}, \code{"Vcmax25"}, \code{"ToptV"}, \code{"EaJ"},
-#'   \code{"delsJ"}, \code{"Jmax25"}, \code{"ToptJ"}
-#' @param val Test value for \code{par}
-#' @param Ci Ci value to evaluate at (a fixed value, or \code{"variable"} to
-#'   use each curve's measured Ci — needed for the fully dynamic Topt of A)
-#'
-#' @return A one-row data frame: \code{par}, \code{value}, and the resulting
-#'   \code{Topt_An}/\code{Topt_Ac}/\code{Topt_Aj} (with standard errors)
-#' @export
-sensitivity_analysis_ToptA = function(
-    Tresp_fits,
-    ACi_params,
-    par = c("EaV", "delsV", "Vcmax25", "ToptV",
-            "EaJ", "delsJ", "Jmax", "ToptJ"),
-    val,
-    Ci = 250
-) {
-  if (par %in% c("EaV", "delsV", "Vcmax25", "ToptV")) {
-    ACi_params = ACi_params |> filter(!(is.na(Jmax) | is.na(Aj250)))
-    # Set parameter value
-    if (par == "EaV") {
-      Ea = val
-      k25 = Tresp_fits$Vcmax25
-      delS = Tresp_fits$delsV
-
-    } else if (par == "delsV") {
-      delS = val
-      Ea = Tresp_fits$EaV
-      k25 = Tresp_fits$Vcmax25
-
-    } else if (par == "Vcmax25") {
-      k25 = val
-      Ea = Tresp_fits$EaV
-      delS = Tresp_fits$delsV
-    } else if (par == "ToptV") {
-      Ropt = Tresp_fits$optV
-      Ea = Tresp_fits$EaV
-      Topt = val + 273.15
-    }
-
-    # Fit Vcmax-T response
-    TsK = ACi_params$TsK
-    Vcmax =
-      if (par != "ToptV") { k25 * exp((Ea * (TsK - 298.15))/(298.15 * 0.008314 * TsK)) *
-      (1 + exp((298.15 * delS - 200)/(298.15 * 0.008314)))/
-      (1 + exp((TsK * delS - 200)/(TsK * 0.008314)))
-      } else {
-        Ropt*
-          ((200*exp(Ea*(TsK-Topt)/(TsK*0.008314*Topt))/
-              (200-(Ea*(1-exp(200*(TsK-Topt)/(TsK*0.008314*Topt)))))))
-      }
-
-    # Calculate associated net Ac
-    if (Ci == "variable") {
-      Ci = ACi_params$Ci
-    }
-    Ac_net = Vcmax * (Ci - ACi_params$GammaStar) /
-      (Ci + ACi_params$Km) - ACi_params$Rd
-
-    # Calculate ToptAc
-    df = data.frame(A = Ac_net, Tleaf = ACi_params$Tleaf)
-    AcvT_fit = fitA250vT(df, var = "A", incl_random_effect = FALSE)
-    ToptAc = AcvT_fit[2]
-    ToptAc.se = AcvT_fit[5]
-
-    # Calculate net Aj and ToptAj
-    Aj_net = ACi_params$Aj250 - ACi_params$Rd
-    df = data.frame(A = Aj_net, Tleaf = ACi_params$Tleaf)
-    AjvT_fit = fitA250vT(df, var = "A", incl_random_effect = FALSE)
-    ToptAj = AjvT_fit[2]
-    ToptAj.se = AjvT_fit[5]
-
-  } else if (par %in% c("EaJ", "delsJ", "Jmax25", "ToptJ")) {
-
-    ACi_params = ACi_params |> filter(!(is.na(Vcmax) | is.na(Ac250)))
-
-    # Set parameter value
-    if (par == "EaJ") {
-      Ea = val
-      k25 = Tresp_fits$Jmax25
-      delS = Tresp_fits$delsJ
-
-    } else if (par == "delsJ") {
-      delS = val
-      Ea = Tresp_fits$EaJ
-      k25 = Tresp_fits$Jmax25
-
-    } else if (par == "Jmax25") {
-      k25 = val
-      Ea = Tresp_fits$EaJ
-      delS = Tresp_fits$delsJ
-    } else if (par == "ToptJ") {
-      Ropt = Tresp_fits$optJ
-      Ea = Tresp_fits$EaJ
-      Topt = val + 273.15
-    }
-
-    # Fit Jmax-T response
-    TsK = ACi_params$TsK
-    Jmax =
-      if (par != "ToptJ") {
-        k25 * exp((Ea * (TsK - 298.15))/(298.15 * 0.008314 * TsK)) *
-          (1 + exp((298.15 * delS - 200)/(298.15 * 0.008314)))/
-          (1 + exp((TsK * delS - 200)/(TsK * 0.008314)))
-      } else {
-        Ropt*
-          ((200*exp(Ea*(TsK-Topt)/(TsK*0.008314*Topt))/
-              (200-(Ea*(1-exp(200*(TsK-Topt)/(TsK*0.008314*Topt)))))))
-      }
-
-    # Calculate associated net Aj
-    if (Ci == "variable") {
-      Ci = ACi_params$Ci
-    }
-    Aj_net = Jmax * (Ci - ACi_params$GammaStar) /
-      (Ci + 2. * ACi_params$GammaStar) - ACi_params$Rd
-
-    # Calculate ToptAj
-    df = data.frame(A = Aj_net, Tleaf = ACi_params$Tleaf)
-    AjvT_fit = fitA250vT(df, var = "A", incl_random_effect = FALSE)
-    ToptAj = AjvT_fit[2]
-    ToptAj.se = AjvT_fit[5]
-
-    # Calculate net Ac and ToptAc
-    Ac_net = ACi_params$Ac250 - ACi_params$Rd
-    df = data.frame(A = Ac_net, Tleaf = ACi_params$Tleaf)
-    AcvT_fit = fitA250vT(df, var = "A", incl_random_effect = FALSE)
-    ToptAc = AcvT_fit[2]
-    ToptAc.se = AcvT_fit[5]
-  }
-
-  Anet <- -mapply(QUADP, A = 1 - 1e-04, B = Ac_net + Aj_net, C = Ac_net *
-                  Aj_net)
-
-  # Fit A-T response
-  df = data.frame(A = Anet, Tleaf = ACi_params$Tleaf)
-  AvT_fit = fitA250vT(df, var = "A", incl_random_effect = FALSE)
-  ToptA = AvT_fit[2]
-  ToptA.se = AvT_fit[5]
-
-  Topts = data.frame("par" = par, "value" = val,
-                     "Topt_An" = ToptA, "Topt_Ac" = ToptAc, "Topt_Aj" = ToptAj,
-                     "Topt_An.se" = ToptA.se,"Topt_Ac.se" = ToptAc.se, "Topt_Aj.se" = ToptAj.se
-                     )
-
-  return(Topts)
-}
-
-#' Run a Vcmax/Jmax parameter sensitivity analysis for one sample
-#'
-#' For one location/species combination, perturbs each Vcmax/Jmax
-#' temperature-response parameter across a small range around its fitted
-#' value (see \code{\link{safe_sensitivity_run}}) and collects the resulting
-#' shifts in Topt of assimilation.
-#'
-#' @param all_params_by_sample A named list of fitted A-Ci curve parameter
-#'   data frames, one per \code{"<location> - <species>"} combination (e.g.
-#'   from splitting \code{\link{extract_curve_params}}'s output)
-#' @param Tresp_predictions A data frame of fitted temperature-response
-#'   parameters with \code{species} and \code{location} columns
-#' @param loc Location name
-#' @param sp Species name
-#' @param incl_Topts Whether to also perturb \code{ToptV}/\code{ToptJ}
-#'   (requires \code{Tresp_predictions} to have those columns)
-#'
-#' @return A data frame with one row per (parameter, test value) combination
-#'   and the resulting \code{Topt_An}/\code{Topt_Ac}/\code{Topt_Aj}
-#' @export
-run_sensitivity_analysis = function(
-    all_params_by_sample,
-    Tresp_predictions,
-    loc = "Nightcap",
-    sp = "Quintinia sieberi",
-    incl_Topts = FALSE) {
-
-  # Filter data for location and species of interest
-  loc_sp = paste0(loc, " - ", sp)
-  ACi_params = all_params_by_sample[[loc_sp]]
-  Tresp_fits = Tresp_predictions |>
-    filter(species == sp, location == loc)
-
-  # Create data frame with test values of Vcmax/Jmax parameters spanning a
-  # small range around the sample's own fitted value
-  test_vals = data.frame(EaV = seq(Tresp_fits$EaV - 0.01*Tresp_fits$EaV, Tresp_fits$EaV + 0.01*Tresp_fits$EaV, length.out = 10),
-                         EaJ = seq(Tresp_fits$EaJ - 0.01*Tresp_fits$EaJ, Tresp_fits$EaJ + 0.01*Tresp_fits$EaJ, length.out = 10),
-                         delsV = seq(Tresp_fits$delsV - 0.01*Tresp_fits$delsV, Tresp_fits$delsV + 0.01*Tresp_fits$delsV, length.out = 10),
-                         delsJ = seq(Tresp_fits$delsJ - 0.01*Tresp_fits$delsJ, Tresp_fits$delsJ + 0.01*Tresp_fits$delsJ, length.out = 10),
-                         Vcmax25 = seq(Tresp_fits$Vcmax25 - 0.01*Tresp_fits$Vcmax25, Tresp_fits$Vcmax25 + 0.01*Tresp_fits$Vcmax25, length.out = 10),
-                         Jmax25 = seq(Tresp_fits$Jmax25 - 0.01*Tresp_fits$Jmax25, Tresp_fits$Jmax25 + 0.01*Tresp_fits$Jmax25, length.out = 10)
-  )
-
-  if (isTRUE(incl_Topts)) {
-    test_vals$ToptV = c(26.6, Tresp_fits$ToptV, 50.9)
-    test_vals$ToptJ = c(19.2, Tresp_fits$ToptJ, 37.8)
-  }
-  # Loop through each parameter column
-  out = lapply(seq_along(test_vals), function(i) {
-    par_name = names(test_vals)[i]
-    param_vals = test_vals[[i]]
-
-    preds = data.frame(t(sapply(param_vals, function(val) {
-      safe_sensitivity_run(par_name, val, Tresp_fits, ACi_params)
-    })))
-
-    preds$param = par_name
-    preds$test_val = param_vals
-    return(preds)
-  })
-
-  # Output dataframe reformatting
-  out = bind_rows(out)
-  out[2:5] = as.numeric(unlist(out[2:5]))
-  out[1] = unlist(out[1])
-
-  return(out)
-}
-
-#' Solve partial derivatives dA/dMAT from Vcmax/Jmax parameter sensitivities
-#'
-#' Combines a sample's Vcmax/Jmax parameter sensitivity analysis (see
-#' \code{\link{run_sensitivity_analysis}}) with each parameter's fitted
-#' climate sensitivity (\code{dpar/dMAT}) to estimate that parameter's
-#' contribution to the shift in Topt of assimilation across the climate
-#' gradient.
-#'
-#' @param all_params_by_sample A named list of fitted A-Ci curve parameter
-#'   data frames, passed through to \code{\link{run_sensitivity_analysis}}
-#' @param Tresp_predictions A data frame of fitted temperature-response
-#'   parameters, passed through to \code{\link{run_sensitivity_analysis}}
-#' @param par_vs_MAT_fits A data frame of \code{dpar/dMAT} regression fits
-#'   (one row per parameter in \code{par_names}, see
-#'   \code{\link{fit_regression}}) with a \code{slope} column
-#' @param par_names Character vector of Vcmax/Jmax parameter names to
-#'   include (e.g. \code{c("EaV", "delsV", "Vcmax25", "EaJ", "delsJ",
-#'   "Jmax25")})
-#' @param loc Location name
-#' @param sp Species name
-#' @param incl_Topts Whether to also include \code{ToptV}/\code{ToptJ}
-#'
-#' @return A data frame with one row per parameter: \code{dpar_dMAT},
-#'   \code{dA250_dpar}/\code{dAc_dpar}/\code{dAj_dpar}, and each of their
-#'   products with \code{dpar_dMAT}
-#' @export
-solve_partials = function(
-    all_params_by_sample,
-    Tresp_predictions,
-    par_vs_MAT_fits,
-    par_names,
-    loc = "Nightcap",
-    sp = "Quintinia sieberi",
-    incl_Topts = FALSE
-    ) {
-
-  # Run sensitivity analysis of Vcmax/Jmax parameters
-  out = run_sensitivity_analysis(all_params_by_sample, Tresp_predictions, loc, sp, incl_Topts)
-
-  # Estimate dA/dpar from regression
-  ToptA250_vs_par.fits = data.frame(t(sapply(par_names, fit_regression, y = "Topt_An", df = out)))
-  ToptA250_vs_par.fits[3:4] = as.numeric(unlist(ToptA250_vs_par.fits[3:4]))
-
-  ToptAc_vs_par.fits = data.frame(t(sapply(par_names, fit_regression, y = "Topt_Ac", df = out)))
-  ToptAc_vs_par.fits[3:4] = as.numeric(unlist(ToptAc_vs_par.fits[3:4]))
-
-  ToptAj_vs_par.fits = data.frame(t(sapply(par_names, fit_regression, y = "Topt_Aj", df = out)))
-  ToptAj_vs_par.fits[3:4] = as.numeric(unlist(ToptAj_vs_par.fits[3:4]))
-
-  # Create data frame summarizing dA/dpar, dpar/dMAT, and their product
-  ToptA250_vs_MAT_props = data.frame(
-    location = loc,
-    species = sp,
-    par = par_names,
-    dpar_dMAT = par_vs_MAT_fits$slope,
-    dA250_dpar = ToptA250_vs_par.fits$slope,
-    A250_partial = ToptA250_vs_par.fits$slope * par_vs_MAT_fits$slope,
-    dAc_dpar = ToptAc_vs_par.fits$slope,
-    Ac_partial = ToptAc_vs_par.fits$slope * par_vs_MAT_fits$slope,
-    dAj_dpar = ToptAj_vs_par.fits$slope,
-    Aj_partial = ToptAj_vs_par.fits$slope * par_vs_MAT_fits$slope
-  )
-
-  return(ToptA250_vs_MAT_props)
 }
 
 #' Larger root of a quadratic equation
@@ -706,88 +455,3 @@ QUADP <- function(A, B, C)
   }
 }
 
-#' Run a sensitivity-analysis fit, retrying toward the fitted value on failure
-#'
-#' Wraps \code{\link{sensitivity_analysis_ToptA}}: if fitting fails to
-#' converge at \code{val}, shrinks the gap between \code{val} and the
-#' sample's own fitted value by \code{step_fraction} and retries, up to
-#' \code{max_attempts} times. This is a deliberate robustness mechanism (test
-#' values far from the fitted value more often fail to converge), not error
-#' handling to silently bypass failures — if every attempt fails, the result
-#' is \code{NA} with a warning.
-#'
-#' @inheritParams sensitivity_analysis_ToptA
-#' @param par_name Which parameter is being perturbed (see \code{par} in
-#'   \code{\link{sensitivity_analysis_ToptA}})
-#' @param max_attempts Maximum number of retries
-#' @param step_fraction Fraction of the remaining gap to \code{Tresp_fits}'s
-#'   fitted value to shrink toward on each retry
-#'
-#' @return The result of \code{\link{sensitivity_analysis_ToptA}}, or a
-#'   vector of \code{NA} if every attempt failed
-#' @export
-safe_sensitivity_run <- function(par_name, val, Tresp_fits, ACi_params, max_attempts = 10, step_fraction = 0.95) {
-  # Get the fitted (central) value
-  fitted_val <- Tresp_fits[[par_name]]
-
-  attempt <- 1
-  success <- FALSE
-  result <- NULL
-
-  while (attempt <= max_attempts && !success) {
-    try_result <- try({
-      out <- sensitivity_analysis_ToptA(val, Tresp_fits = Tresp_fits, ACi_params = ACi_params, par = par_name)
-      success <- TRUE
-      result <- out
-    }, silent = TRUE)
-
-    if (!success) {
-      # Shrink the difference between the test value and fitted value
-      val <- fitted_val + step_fraction * (val - fitted_val)
-      attempt <- attempt + 1
-    }
-  }
-
-  if (!success) {
-    warning(paste("Failed to converge for", par_name, "after", max_attempts, "attempts. Returning NA."))
-    return(rep(NA, length(result)))
-  }
-
-  return(result)
-}
-
-#' @rdname safe_sensitivity_run
-#' @export
-safe_sensitivity_run_v2 <- function(par_name, val, Tresp_fits, ACi_params, max_attempts = 10, step_fraction = 0.8) {
-  fitted_val <- Tresp_fits[[par_name]]
-
-  attempt <- 1
-  success <- FALSE
-  result <- NULL
-
-  while (attempt <= max_attempts && !success) {
-    try_result <- try(
-      sensitivity_analysis_ToptA(val, Tresp_fits = Tresp_fits, ACi_params = ACi_params, par = par_name),
-      silent = TRUE
-    )
-
-    if (!inherits(try_result, "try-error")) {
-      success <- TRUE
-      result <- try_result
-    } else {
-      val <- fitted_val + step_fraction * (val - fitted_val)
-      attempt <- attempt + 1
-    }
-  }
-
-  if (!success) {
-    warning(paste("Failed to converge for", par_name, "after", max_attempts, "attempts. Returning NA."))
-    if (!is.null(result)) {
-      return(rep(NA, length(result)))
-    } else {
-      return(NA)
-    }
-  }
-
-  return(result)
-}

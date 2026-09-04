@@ -114,6 +114,24 @@ test_that("fit_temperature_response recovers known peaked-Arrhenius parameters",
   expect_true(all(c("Vcmax25", "EaV", "R2_Arr", "R2_Peak", "AIC_Arr", "AIC_Peak", "prob_V") %in% names(fit_arr)))
 })
 
+test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
+  set.seed(25)
+  n_rep = 4
+  Tleaf = rep(seq(10, 35, by = 5), each = n_rep)
+  sample = rep(paste0("S", seq_len(n_rep)), times = length(unique(Tleaf)))
+  a_true = log(2); b_true = 0.05; c_true = -0.0005
+  rep_effect = stats::setNames(rnorm(n_rep, 0, 0.05), paste0("S", seq_len(n_rep)))
+  ln_R = a_true + rep_effect[sample] + b_true * Tleaf + c_true * Tleaf^2 +
+    rnorm(length(Tleaf), 0, 0.03)
+  df = data.frame(Tleaf = Tleaf, sample = sample, R = exp(ln_R))
+
+  fit = fitRvT(df)
+
+  Rdark25_true = exp(a_true + b_true * 25 + c_true * 25^2)
+  expect_equal(unname(fit["Rdark25"]), Rdark25_true, tolerance = 0.15)
+  expect_true(unname(fit["r2"]) > 0.9)
+})
+
 test_that("fitA250vT recovers a known quadratic Topt response", {
   set.seed(24)
   n_rep = 4

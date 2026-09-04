@@ -4,25 +4,20 @@ Title: Processing and Fitting of Leaf Gas Exchange Curves
 Version: 0.1.0
 Author: Camille K. Sicangco
 Maintainer: <c.sicangco@westernsydney.edu.au>
-Description: Shared functions for tidying LI-6800 gas exchange output files
-    and fitting A-Ci and temperature-response (Vcmax, Jmax, respiration)
-    curves, extracted for reuse across multiple field study projects.
-    Provides a common pipeline for reading and cleaning raw LI-6800 exports,
-    fitting A-Ci curves with either the plantecophys or PhotoGEA packages,
-    and fitting Arrhenius-type temperature responses to derived
+Description: Shared functions for adding/mapping species codes and fitting
+    A-Ci and temperature-response (Vcmax, Jmax, respiration) curves,
+    extracted for reuse across multiple field study projects. Provides
+    A-Ci curve fitting with either the plantecophys or PhotoGEA packages,
+    and fitting of Arrhenius-type temperature responses to derived
     photosynthetic parameters.
 Imports:
     dplyr,
     rlang,
     stringr,
-    tibble,
-    lubridate,
-    hms,
     nlme,
-    units,
+    lme4,
     plantecophys,
     PhotoGEA,
-    gasanalyzer,
     lattice,
     utils
 Suggests:

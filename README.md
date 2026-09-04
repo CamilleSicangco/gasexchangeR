@@ -1,17 +1,20 @@
 # gasexchangeR
 
-Shared R functions for tidying LI-6800 leaf gas exchange output and fitting
-A-Ci and temperature-response (Vcmax, Jmax, respiration) curves. Extracted
-for reuse across multiple field study projects, it provides a common
-pipeline for:
+Shared R functions for adding/mapping species codes and fitting A-Ci and
+temperature-response (Vcmax, Jmax, respiration) curves. Extracted for reuse
+across multiple field study projects, it provides:
 
-- reading and cleaning raw LI-6800 `.xlsx` exports into a fixed,
-  ESS-DIVE-style column layout,
-- fitting A-Ci curves with either the [plantecophys](https://cran.r-project.org/package=plantecophys)
+- `add_sp_code()`/`add_species()` for deriving/attaching 4-letter species
+  codes,
+- A-Ci curve fitting with either the [plantecophys](https://cran.r-project.org/package=plantecophys)
   or [PhotoGEA](https://cran.r-project.org/package=PhotoGEA) packages, and
-- fitting Arrhenius-type temperature responses to the resulting
-  photosynthetic parameters, including climate-sensitivity and
-  parameter-perturbation sensitivity analyses.
+- Arrhenius-type temperature-response fitting for the resulting
+  photosynthetic parameters.
+
+Reading/tidying raw LI-6800 exports and downstream sensitivity-analysis
+functions are deliberately **not** part of this package — they stay local to
+each project, since raw file formats/layouts and sensitivity-analysis needs
+have so far diverged too much between projects to share safely.
 
 ## Installation
 
@@ -59,31 +62,19 @@ It's used in the A-Ci and temperature-response examples below; see
 
 ## Workflow overview
 
-### 1. Tidy raw LI-6800 exports
+### 1. Add/map species codes
 
 ```r
 library(gasexchangeR)
 
-# Optionally re-apply a manually measured leaf area and recalculate
-# everything the LI-6800 derives from it
-df <- tidy_gasxchg(
-  "data/in/raw/20260504/spec_700m_rep1_aci_25C.xlsx",
-  type = "A-Ci",
-  area_correction = NULL
-)
+df <- add_sp_code(df)                    # species -> 4-letter sp_code
+df <- add_species(df, lookup = my_lookup) # sp_code -> species, via a study-specific lookup
 ```
 
-`tidy_gasxchg()` reads a raw export with `gasanalyzer::read_6800_xlsx()`,
-drops duplicated/raw columns, strips LI-6800 column-group prefixes, parses
-identifying information (`sp_code`, `elevation`, `replicate`, `meas_temp`)
-out of the filename, renames columns to ESS-DIVE-style names, and selects a
-fixed set of output columns. It expects filenames of the form
-`<sp_code>_<elevation>_<rep>[_newleaf]_<aci|rt>_<temp>C`.
-
-`correct_6800_area()` and `add_sp_code()`/`add_species()` are smaller
-building blocks used alongside it — the former re-applies a manually
-measured leaf area and recalculates derived quantities using the file's own
-embedded equations, the latter derive/attach species codes and names.
+Reading and tidying raw LI-6800 exports into a `data.frame` is left to each
+project (raw file layouts and metadata-parsing conventions have diverged too
+much between projects to share safely) — `add_sp_code()`/`add_species()`
+pick up from there.
 
 ### 2. Fit A-Ci curves
 
@@ -122,19 +113,17 @@ topt_fit <- fitA250vT(params, var = "A250")
 `fit_temperature_response()` and `fit_arrhenius()` fit (peaked-)Arrhenius
 models of Vcmax/Jmax vs. leaf temperature via `nlme`, with `replicate` as a
 random effect. `fitA250vT()` fits a quadratic-Topt model of assimilation vs.
-leaf temperature, and `fitRvT_Ea()` fits an Arrhenius model of dark
-respiration vs. leaf temperature (given a data frame with `Rd` and `Tleaf`
-columns). `arrhenius_formula()` and `quadratic_topt_formula()` build the
-underlying model formulas directly if you need a custom fit.
+leaf temperature. Two respiration-vs-temperature fitters are provided, for
+different models: `fitRvT_Ea()` fits an Arrhenius model (given a data frame
+with `Rd` and `Tleaf` columns), and `fitRvT()` fits a quadratic-in-log mixed
+model with a per-sample random effect (Heskel et al. 2016; given a data
+frame with `R`, `sample`, and `Tleaf` columns). `arrhenius_formula()` and
+`quadratic_topt_formula()` build the underlying model formulas directly if
+you need a custom fit. `fit_regression()` is a general parameter-vs-MAT (or
+similar) regression helper usable alongside these.
 
-### 4. Climate- and parameter-sensitivity analyses
-
-`fit_regression()`, `sensitivity_analysis_ToptA()`,
-`run_sensitivity_analysis()`, `solve_partials()`, and the
-`safe_sensitivity_run()`/`safe_sensitivity_run_v2()` wrappers support
-downstream analyses of how individual Vcmax/Jmax temperature-response
-parameters shift the Topt of assimilation, and how much each parameter's
-sensitivity to mean annual temperature contributes to that shift.
+Climate/parameter-perturbation sensitivity analysis is deliberately **not**
+part of this package — those functions stay local to each project.
 
 ## Documentation
 

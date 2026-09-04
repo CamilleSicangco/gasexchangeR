@@ -17,8 +17,8 @@ fit_regression(
 \item{y}{Response column name in \code{df}}
 
 \item{df}{A data frame of temperature-response fits (when \code{x ==
-"MAT"}) or sensitivity-analysis results (otherwise, see
-\code{\link{run_sensitivity_analysis}})}
+"MAT"}) or, for a consuming project's own sensitivity-analysis results
+(otherwise), a data frame with a \code{par} column matching \code{x}}
 }
 \value{
 A named character/numeric vector: \code{x}, \code{y}, fitted
