@@ -8,10 +8,10 @@
 #' @importFrom utils globalVariables
 #' @importFrom PhotoGEA check_response_curve_data organize_response_curve_data calculate_temperature_response calculate_total_pressure consolidate fit_c3_aci calculate_jmax is.exdf check_required_variables multi_curve_colors
 
-# PhotoGEA's c3_temperature_param_sharkey and jmax_temperature_param_bernacchi
+# PhotoGEA's c3_temperature_param_bernacchi and jmax_temperature_param_bernacchi
 # are lazy-loaded datasets, and unit_dictionary is an unexported internal
 # function - none of the three can be declared via @importFrom, so call sites
-# reference them as PhotoGEA::c3_temperature_param_sharkey /
+# reference them as PhotoGEA::c3_temperature_param_bernacchi /
 # PhotoGEA::jmax_temperature_param_bernacchi / PhotoGEA:::unit_dictionary
 # instead (see fit_ACis.R).
 

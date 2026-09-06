@@ -89,11 +89,19 @@ when extending this file):
   extraction from `fitaci()` coefficients.
 
 Two PhotoGEA objects are lazy-loaded datasets
-(`PhotoGEA::c3_temperature_param_sharkey`,
+(`PhotoGEA::c3_temperature_param_bernacchi`,
 `PhotoGEA::jmax_temperature_param_bernacchi`) and one is an unexported
 internal (`PhotoGEA:::unit_dictionary`) — none of the three can be declared
 via `@importFrom`, so call sites reference them with `::`/`:::` explicitly
-(see the comment in `R/gasexchangeR-package.R`).
+(see the comment in `R/gasexchangeR-package.R`). Both temperature-response
+datasets are deliberately the Bernacchi et al. 2001/2003 parameterization
+(not `c3_temperature_param_sharkey`, PhotoGEA's other bundled option) to
+match every consuming project's historical PhotoGEA fits — switching would
+change fitted Vcmax/Km/GammaStar values, not just refactor code, so don't
+change this without checking downstream saved fits in consuming repos.
+`fit_ACis_PhotGEA()` also fixes `set.seed(1234)` before fitting, since
+`PhotoGEA::fit_c3_aci()`'s optimizer has a stochastic component and fits
+should be reproducible run-to-run.
 
 ### Temperature-response formula builders (`fit_Tresponses.R`)
 
