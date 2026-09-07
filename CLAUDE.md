@@ -7,16 +7,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `gasexchangeR` is an R package of shared functions, extracted for reuse
 across multiple field study projects, for:
 
-- tidying raw LI-6800 leaf gas exchange `.xlsx` exports into a fixed,
-  ESS-DIVE-style column layout (`R/processing.R`),
+- deriving/mapping 4-letter species codes (`R/processing.R`),
 - fitting A-Ci curves via either the `plantecophys` or `PhotoGEA` packages
   behind one engine-aware API (`R/fit_ACis.R`), and
 - fitting Arrhenius-type temperature responses (Vcmax, Jmax, respiration)
-  and running climate/parameter sensitivity analyses on the results
   (`R/fit_Tresponses.R`).
 
+Reading/tidying raw LI-6800 exports and climate/parameter
+sensitivity-analysis functions used to live here but were moved back out to
+each consuming project (currently `OzEastCoast_ForestPhysio` and
+`LamingtonChums`) — raw file formats/layouts differ enough between projects
+(e.g. different directory-depth conventions for parsing curve IDs out of
+file paths) that a shared implementation risked silently mis-parsing data
+rather than erroring, and the sensitivity-analysis functions were judged to
+belong with each project's own analysis code rather than the shared
+package. Don't re-add either without confirming the reasoning above no
+longer applies.
+
 See [README.md](README.md) for the user-facing workflow walkthrough
-(tidy → fit A-Ci → fit temperature response → sensitivity analysis).
+(add species codes → fit A-Ci → fit temperature response).
 
 ## Commands
 
@@ -51,8 +60,8 @@ files.
   declarations for column names referenced via tidyverse-style NSE
   (`filter()`/`mutate()`), which `R CMD check` can't otherwise distinguish
   from undefined globals.
-- `R/processing.R` — `tidy_gasxchg()` and its helpers turn one raw LI-6800
-  export into a tidied data frame.
+- `R/processing.R` — `add_sp_code()`/`add_species()` derive/map 4-letter
+  species codes.
 - `R/fit_ACis.R` — A-Ci curve fitting and diagnostic plotting.
 - `R/fit_Tresponses.R` — temperature-response model fitting and sensitivity
   analysis.
@@ -80,11 +89,19 @@ when extending this file):
   extraction from `fitaci()` coefficients.
 
 Two PhotoGEA objects are lazy-loaded datasets
-(`PhotoGEA::c3_temperature_param_sharkey`,
+(`PhotoGEA::c3_temperature_param_bernacchi`,
 `PhotoGEA::jmax_temperature_param_bernacchi`) and one is an unexported
 internal (`PhotoGEA:::unit_dictionary`) — none of the three can be declared
 via `@importFrom`, so call sites reference them with `::`/`:::` explicitly
-(see the comment in `R/gasexchangeR-package.R`).
+(see the comment in `R/gasexchangeR-package.R`). Both temperature-response
+datasets are deliberately the Bernacchi et al. 2001/2003 parameterization
+(not `c3_temperature_param_sharkey`, PhotoGEA's other bundled option) to
+match every consuming project's historical PhotoGEA fits — switching would
+change fitted Vcmax/Km/GammaStar values, not just refactor code, so don't
+change this without checking downstream saved fits in consuming repos.
+`fit_ACis_PhotGEA()` also fixes `set.seed(1234)` before fitting, since
+`PhotoGEA::fit_c3_aci()`'s optimizer has a stochastic component and fits
+should be reproducible run-to-run.
 
 ### Temperature-response formula builders (`fit_Tresponses.R`)
 
@@ -95,37 +112,26 @@ response variable appeared on the left-hand side. When adding a new
 Arrhenius-family or quadratic-Topt fit, extend these builders rather than
 writing a new formula object by hand.
 
-`fit_temperature_response()`/`fit_arrhenius()` and `fitA250vT()` fit models
+`fit_temperature_response()`/`fit_arrhenius()` and `fitAvT()` fit models
 via `nlme::nlme()` with `replicate` as a random effect (or `stats::nls()`
 when `incl_random_effect = FALSE`); both expect a `TsK`/`Tleaf` and
-`replicate` column in their input data.
+`replicate` column in their input data. `fitRvT_Ea()` (Drake et al. 2015,
+Arrhenius `nls`) and `fitRvT()` (Heskel et al. 2016, quadratic-in-log
+`lme4::lmer()` with a per-`sample` random effect) are two genuinely
+different respiration-vs-temperature models, kept as separate functions
+rather than unified — don't merge them, their required input columns differ
+(`Rd`/`Tleaf` vs. `R`/`sample`/`Tleaf`).
 
-The sensitivity-analysis chain (`fit_regression()` →
-`sensitivity_analysis_ToptA()` → `run_sensitivity_analysis()` →
-`solve_partials()`) perturbs one fitted Vcmax/Jmax temperature-response
-parameter at a time, refits the quadratic-Topt model of assimilation vs.
-temperature, and estimates that parameter's contribution to a Topt shift
-across a climate gradient. `safe_sensitivity_run()`/`safe_sensitivity_run_v2()`
-wrap `sensitivity_analysis_ToptA()` with retry-toward-the-fitted-value logic
-for perturbed values that fail to converge — this is deliberate robustness
-for far-from-fitted test values, not general error suppression; on
-exhausting `max_attempts` it returns `NA` with a warning rather than
-silently swallowing the failure.
-
-### Filename-driven metadata parsing in `tidy_gasxchg()`
-
-Curve-identifying metadata (`sp_code`, `elevation`, `replicate`,
-`meas_temp`) is parsed out of the file path using a **fixed character
-offset** (`str_sub(path, 22, -6)`), not just the basename. Callers must
-ensure the path passed in has a directory depth consistent with that offset
-for the filename portion to line up correctly. Expected filename
-convention: `<sp_code>_<elevation>_<rep>[_newleaf]_<aci|rt>_<temp>C` for A-Ci
-curves, `<sp_code>_<elevation>_<rep>_rt` for R-T curves.
+`fit_regression()` is a general parameter-vs-x linear-regression helper
+(used e.g. for parameter-vs-MAT climate-sensitivity fits) that remains here;
+the sensitivity-analysis functions that used to consume it
+(`sensitivity_analysis_ToptA()`, `run_sensitivity_analysis()`,
+`solve_partials()`, `safe_sensitivity_run()`/`safe_sensitivity_run_v2()`)
+have moved to each consuming project — see the note in "What this package
+is" above.
 
 ## Testing notes
 
-- `tests/testthat/test-processing.R` uses real fixture `.xlsx` files under
-  `tests/testthat/fixtures/data/in/raw/` via `withr::local_dir()`.
 - `tests/testthat/test-fit-acis.R` tests the plantecophys engine
   end-to-end against a simulated two-limitation A-Ci curve, but tests the
   PhotoGEA engine's `get_r2()`/`extract_curve_params()` branches against

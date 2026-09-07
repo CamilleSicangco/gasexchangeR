@@ -48,8 +48,12 @@ organise_data_for_PhotoGEA = function(
   licor_exdf <- do.call(rbind, gasex_exdf_list_processed)
 
   # Calculate temperature-dependent values of C3 photosynthetic parameters
-  # (a lazy-loaded PhotoGEA dataset, so it can't be @importFrom'd)
-  licor_exdf <- calculate_temperature_response(licor_exdf, PhotoGEA::c3_temperature_param_sharkey)
+  # (a lazy-loaded PhotoGEA dataset, so it can't be @importFrom'd). Bernacchi
+  # et al. 2001, matching jmax_temperature_param_bernacchi below and every
+  # consuming project's own historical PhotoGEA fits -- don't switch to
+  # c3_temperature_param_sharkey without checking downstream saved fits, since
+  # this changes fitted Vcmax/Km/GammaStar values, not just refactors them.
+  licor_exdf <- calculate_temperature_response(licor_exdf, PhotoGEA::c3_temperature_param_bernacchi)
 
   # Calculate the total pressure in the leaf chamber
   licor_exdf <- calculate_total_pressure(licor_exdf)
@@ -76,6 +80,11 @@ fit_ACis_PhotGEA = function(
   Ca_atmospheric = 420
 )
 {
+  # PhotoGEA::fit_c3_aci()'s optimizer has a stochastic component; fix the
+  # seed so repeated fits (and comparisons against previously saved results)
+  # are reproducible.
+  set.seed(1234)
+
   # Fit the A-Ci curves
   ACi_fits <- consolidate(by(
     licor_exdf,                       # The `exdf` object containing the curves
