@@ -19,6 +19,7 @@ Imports:
     plantecophys,
     PhotoGEA,
     lattice,
+    stats,
     utils
 Suggests:
     testthat (>= 3.0.0),
