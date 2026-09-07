@@ -132,6 +132,50 @@ test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
   expect_true(unname(fit["r2"]) > 0.9)
 })
 
+test_that("fit_Tresponse_groups fits every group, attaches group columns, and drops failures", {
+  # Mirrors the fitRvT test's own data-generating pattern above, just
+  # parameterized by n_curves (its n_rep) so a single-curve group can be
+  # simulated too.
+  simulate_one_group = function(a_true, b_true, c_true, n_curves, seed) {
+    set.seed(seed)
+    Tleaf_seq = seq(10, 35, by = 5)
+    Tleaf_g = rep(Tleaf_seq, each = n_curves)
+    sample = rep(paste0("S", seq_len(n_curves)), times = length(Tleaf_seq))
+    rep_effect = stats::setNames(rnorm(n_curves, 0, 0.05), paste0("S", seq_len(n_curves)))
+    ln_R = a_true + rep_effect[sample] + b_true * Tleaf_g + c_true * Tleaf_g^2 +
+      rnorm(length(Tleaf_g), 0, 0.03)
+    data.frame(Tleaf = Tleaf_g, sample = sample, R = exp(ln_R))
+  }
+
+  # Two groups with enough curves to fit, one with only a single curve (no
+  # replication for fitRvT's per-sample random effect -- expected to fail
+  # and be dropped, exactly like a real single-curve species/elevation group)
+  group_a = cbind(sp_code = "AAAA", elevation = "500m",
+                  simulate_one_group(log(2), 0.05, -0.0005, n_curves = 4, seed = 261))
+  group_b = cbind(sp_code = "BBBB", elevation = "500m",
+                  simulate_one_group(log(3), 0.04, -0.0003, n_curves = 4, seed = 262))
+  group_c = cbind(sp_code = "AAAA", elevation = "900m",
+                  simulate_one_group(log(1.5), 0.06, -0.0004, n_curves = 1, seed = 263))
+
+  all_data = rbind(group_a, group_b, group_c)
+
+  expect_message(
+    result <- fit_Tresponse_groups(all_data, group_cols = c("sp_code", "elevation"), fit_fun = fitRvT),
+    "AAAA.*900m"
+  )
+
+  expect_equal(nrow(result), 2)
+  expect_true(all(c("sp_code", "elevation", "Rdark25", "r2") %in% names(result)))
+  expect_false(any(result$sp_code == "AAAA" & result$elevation == "900m"))
+
+  # True Rdark25 = exp(a + b*25 + c*25^2), matching the fitRvT test above
+  fit_a = result[result$sp_code == "AAAA" & result$elevation == "500m", ]
+  expect_equal(fit_a$Rdark25, exp(log(2) + 0.05 * 25 - 0.0005 * 25^2), tolerance = 0.2)
+
+  fit_b = result[result$sp_code == "BBBB" & result$elevation == "500m", ]
+  expect_equal(fit_b$Rdark25, exp(log(3) + 0.04 * 25 - 0.0003 * 25^2), tolerance = 0.2)
+})
+
 test_that("fitAvT recovers a known quadratic Topt response", {
   set.seed(24)
   n_rep = 4

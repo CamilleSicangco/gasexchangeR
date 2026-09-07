@@ -388,6 +388,88 @@ solve_Tspan = function(Aopt, Topt, b, span = 0.8)
   return(Tspan)
 }
 
+# Fitting multiple groups of curves at once -----------------------------------
+
+#' Fit a temperature-response model to multiple groups of curves at once
+#'
+#' Splits \code{data} by \code{group_cols} and applies \code{fit_fun} to
+#' each group in turn (forwarding \code{...}), combining the results into a
+#' single data frame with the grouping columns attached. Works with any of
+#' this package's single-group temperature-response fitters --
+#' \code{\link{fitRvT}}, \code{\link{fitRvT_Ea}}, \code{\link{fit_arrhenius}},
+#' \code{\link{fit_temperature_response}}, \code{\link{fitAvT}} -- or a
+#' custom function of your own, since it never inspects \code{data}'s column
+#' names itself; it only needs \code{group_cols} to exist. Written to
+#' replace ad hoc copies of this same split/fit/tryCatch/recombine pattern
+#' that were starting to get written out by hand in downstream projects, one
+#' project at a time.
+#'
+#' A "group" here means a set of curves to be pooled into one fit (e.g. every
+#' curve for one species at one elevation) -- it is not a single curve's own
+#' identifier (e.g. \code{curve_ID}/\code{sample}/\code{replicate}), which
+#' most of these fitting functions already expect as a column within each
+#' group and use internally for their own per-curve random effect. Pass that
+#' column name as one of \code{fit_fun}'s own arguments (the same way you
+#' would calling \code{fit_fun} directly), not as part of \code{group_cols}.
+#'
+#' @param data A data frame containing every group's curves, plus the
+#'   column(s) named in \code{group_cols}
+#' @param group_cols Character vector of column name(s) defining a pooling
+#'   group (e.g. \code{c("sp_code", "elevation")}) -- everything sharing one
+#'   combination of these columns' values is handed to \code{fit_fun} as a
+#'   single call
+#' @param fit_fun A fitting function taking a single group's data frame as
+#'   its first argument, returning either a one-row data frame (e.g.
+#'   \code{fitRvT_Ea}, \code{fit_temperature_response}) or a named numeric
+#'   vector (e.g. \code{fitRvT}, \code{fit_arrhenius}, \code{fitAvT})
+#' @param ... Additional arguments passed on to \code{fit_fun}
+#'
+#' @return A data frame with one row per successfully-fitted group: the
+#'   \code{group_cols} values, plus \code{fit_fun}'s result columns. A group
+#'   \code{fit_fun} threw an error on (e.g. too few curves for a mixed
+#'   model's random effect) is dropped rather than fatally stopping the rest
+#'   of the batch, and reported by name with \code{message()} -- the same
+#'   \code{tryCatch()} pattern used by this package's own examples of
+#'   fitting every group in a dataset, just generalized over which column(s)
+#'   define a group
+#' @export
+fit_Tresponse_groups = function(
+  data,
+  group_cols,
+  fit_fun,
+  ...
+)
+{
+  grouped = data |> dplyr::group_by(dplyr::across(dplyr::all_of(group_cols)))
+  groups = dplyr::group_keys(grouped)
+  data_list = dplyr::group_split(grouped)
+
+  fits_list = lapply(seq_along(data_list), function(i) {
+    group_label = paste(paste(group_cols, unlist(groups[i, ])), collapse = ", ")
+
+    tryCatch(
+      fit_fun(as.data.frame(data_list[[i]]), ...),
+      error = function(e) {
+        message("fit_fun() failed for ", group_label, ": ", conditionMessage(e))
+        NULL
+      }
+    )
+  })
+
+  ok = !sapply(fits_list, is.null)
+
+  if (!any(ok)) {
+    warning("fit_Tresponse_groups(): every group failed to fit")
+    return(groups[ok, , drop = FALSE])
+  }
+
+  fits_df = do.call(rbind, lapply(fits_list[ok], function(x) {
+    if (is.data.frame(x)) x else as.data.frame(t(x))
+  }))
+
+  cbind(groups[ok, , drop = FALSE], fits_df, row.names = NULL)
+}
+
 # Sensitivity analysis ---------------------------------------------------------
 
 #' Fit a regression to estimate a parameter's climate sensitivity
