@@ -230,7 +230,7 @@ fit_arrhenius = function(
 #'   the temperature span (\code{Tspan}) for a target fraction of Aopt (see
 #'   \code{\link{solve_Tspan}})
 #' @export
-fitA250vT = function(
+fitAvT = function(
   df,
   var = c("A250", "Ac250", "Aj250", "A275", "A"),
   incl_random_effect = TRUE

@@ -107,12 +107,12 @@ params$TsK <- params$Tleaf + 273.15
 
 peak_fit <- fit_temperature_response(params, response = "Vcmax", return = "Peak")
 arr_fit <- fit_arrhenius(params, response = "Jmax")
-topt_fit <- fitA250vT(params, var = "A250")
+topt_fit <- fitAvT(params, var = "A250")
 ```
 
 `fit_temperature_response()` and `fit_arrhenius()` fit (peaked-)Arrhenius
 models of Vcmax/Jmax vs. leaf temperature via `nlme`, with `replicate` as a
-random effect. `fitA250vT()` fits a quadratic-Topt model of assimilation vs.
+random effect. `fitAvT()` fits a quadratic-Topt model of assimilation vs.
 leaf temperature. Two respiration-vs-temperature fitters are provided, for
 different models: `fitRvT_Ea()` fits an Arrhenius model (given a data frame
 with `Rd` and `Tleaf` columns), and `fitRvT()` fits a quadratic-in-log mixed

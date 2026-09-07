@@ -132,7 +132,7 @@ test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
   expect_true(unname(fit["r2"]) > 0.9)
 })
 
-test_that("fitA250vT recovers a known quadratic Topt response", {
+test_that("fitAvT recovers a known quadratic Topt response", {
   set.seed(24)
   n_rep = 4
   Tleaf = rep(seq(15, 40, by = 5), each = n_rep)
@@ -143,11 +143,11 @@ test_that("fitA250vT recovers a known quadratic Topt response", {
   A250 = Aopt_true - b_true * (Tleaf - Topt_true)^2 + rnorm(length(Tleaf), 0, 0.3)
   df = data.frame(Tleaf = Tleaf, replicate = replicate, A250 = A250)
 
-  fit = fitA250vT(df, var = "A250", incl_random_effect = TRUE)
+  fit = fitAvT(df, var = "A250", incl_random_effect = TRUE)
 
   expect_equal(unname(fit["A250opt"]), Aopt_true, tolerance = 0.1)
   expect_equal(unname(fit["ToptA250"]), Topt_true, tolerance = 0.15)
 
-  fit_fixed = fitA250vT(df, var = "A250", incl_random_effect = FALSE)
+  fit_fixed = fitAvT(df, var = "A250", incl_random_effect = FALSE)
   expect_equal(unname(fit_fixed["A250opt"]), Aopt_true, tolerance = 0.1)
 })

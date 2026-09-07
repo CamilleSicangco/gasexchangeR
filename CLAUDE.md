@@ -112,7 +112,7 @@ response variable appeared on the left-hand side. When adding a new
 Arrhenius-family or quadratic-Topt fit, extend these builders rather than
 writing a new formula object by hand.
 
-`fit_temperature_response()`/`fit_arrhenius()` and `fitA250vT()` fit models
+`fit_temperature_response()`/`fit_arrhenius()` and `fitAvT()` fit models
 via `nlme::nlme()` with `replicate` as a random effect (or `stats::nls()`
 when `incl_random_effect = FALSE`); both expect a `TsK`/`Tleaf` and
 `replicate` column in their input data. `fitRvT_Ea()` (Drake et al. 2015,
