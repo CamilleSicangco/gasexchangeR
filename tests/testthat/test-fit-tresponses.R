@@ -162,7 +162,7 @@ test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
     rnorm(length(Tleaf), 0, 0.03)
   df = data.frame(Tleaf = Tleaf, sample = sample, R = exp(ln_R))
 
-  fit = fitRvT(df)
+  fit = fitRvT(df, random_effect_col = "sample")
 
   Rdark25_true = exp(a_true + b_true * 25 + c_true * 25^2)
   expect_equal(unname(fit["Rdark25"]), Rdark25_true, tolerance = 0.15)
@@ -170,7 +170,7 @@ test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
 
   # Same data, differently-named respiration column, selected via var=
   names(df)[names(df) == "R"] = "Rday"
-  fit_rday = fitRvT(df, var = "Rday")
+  fit_rday = fitRvT(df, var = "Rday", random_effect_col = "sample")
   expect_equal(unname(fit_rday["Rdark25"]), Rdark25_true, tolerance = 0.15)
 
   # Same data again, differently-named grouping column, selected via
@@ -178,6 +178,22 @@ test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
   names(df)[names(df) == "sample"] = "individual"
   fit_custom_col = fitRvT(df, var = "Rday", random_effect_col = "individual")
   expect_equal(unname(fit_custom_col["Rdark25"]), Rdark25_true, tolerance = 0.15)
+})
+
+test_that("fitRvT falls back to a fixed-effects fit when random_effect_col has one level", {
+  set.seed(26)
+  Tleaf = seq(10, 35, by = 5)
+  a_true = log(2); b_true = 0.05; c_true = -0.0005
+  ln_R = a_true + b_true * Tleaf + c_true * Tleaf^2 + rnorm(length(Tleaf), 0, 0.03)
+  df = data.frame(Tleaf = Tleaf, curve_ID = "only_one_curve", R = exp(ln_R))
+
+  expect_message(
+    fit <- fitRvT(df),
+    "Only one level of 'curve_ID'"
+  )
+
+  Rdark25_true = exp(a_true + b_true * 25 + c_true * 25^2)
+  expect_equal(unname(fit["Rdark25"]), Rdark25_true, tolerance = 0.15)
 })
 
 test_that("fit_Tresponse_groups fits every group, attaches group columns, and drops failures", {
@@ -195,9 +211,10 @@ test_that("fit_Tresponse_groups fits every group, attaches group columns, and dr
     data.frame(Tleaf = Tleaf_g, sample = sample, R = exp(ln_R))
   }
 
-  # Two groups with enough curves to fit, one with only a single curve (no
-  # replication for fitRvT's per-sample random effect -- expected to fail
-  # and be dropped, exactly like a real single-curve species/elevation group)
+  # Two groups with enough curves for fitRvT's per-sample random effect, one
+  # with only a single curve (no replication) -- exactly like a real
+  # single-curve species/elevation group. All three should still fit, the
+  # last one falling back to a fixed-effects-only fit.
   group_a = cbind(sp_code = "AAAA", elevation = "500m",
                   simulate_one_group(log(2), 0.05, -0.0005, n_curves = 4, seed = 261))
   group_b = cbind(sp_code = "BBBB", elevation = "500m",
@@ -208,13 +225,13 @@ test_that("fit_Tresponse_groups fits every group, attaches group columns, and dr
   all_data = rbind(group_a, group_b, group_c)
 
   expect_message(
-    result <- fit_Tresponse_groups(all_data, group_cols = c("sp_code", "elevation"), fit_fun = fitRvT),
-    "AAAA.*900m"
+    result <- fit_Tresponse_groups(all_data, group_cols = c("sp_code", "elevation"),
+                                    fit_fun = fitRvT, random_effect_col = "sample"),
+    "Only one level of 'sample'"
   )
 
-  expect_equal(nrow(result), 2)
+  expect_equal(nrow(result), 3)
   expect_true(all(c("sp_code", "elevation", "Rdark25", "r2") %in% names(result)))
-  expect_false(any(result$sp_code == "AAAA" & result$elevation == "900m"))
 
   # True Rdark25 = exp(a + b*25 + c*25^2), matching the fitRvT test above
   fit_a = result[result$sp_code == "AAAA" & result$elevation == "500m", ]
@@ -222,6 +239,11 @@ test_that("fit_Tresponse_groups fits every group, attaches group columns, and dr
 
   fit_b = result[result$sp_code == "BBBB" & result$elevation == "500m", ]
   expect_equal(fit_b$Rdark25, exp(log(3) + 0.04 * 25 - 0.0003 * 25^2), tolerance = 0.2)
+
+  # The single-curve group: fit without a random effect, but still fit
+  fit_c = result[result$sp_code == "AAAA" & result$elevation == "900m", ]
+  expect_equal(nrow(fit_c), 1)
+  expect_equal(fit_c$Rdark25, exp(log(1.5) + 0.06 * 25 - 0.0004 * 25^2), tolerance = 0.2)
 })
 
 test_that("fitAvT recovers a known quadratic Topt response", {

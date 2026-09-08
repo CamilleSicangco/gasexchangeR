@@ -129,16 +129,23 @@ put `Value`/`Estimate` and `Std.Error` in the same first two columns, and
 differently — extend these helpers rather than re-deriving the
 engine-dispatch logic per function. `fitRvT_Ea()` (Drake et al. 2015,
 Arrhenius `nls`) and `fitRvT()` (Heskel et al. 2016, quadratic-in-log
-`lme4::lmer()` with a per-`sample` random effect, and a `var` parameter for
-which respiration-rate column to fit) are two genuinely different
-respiration-vs-temperature models, kept as separate functions rather than
-unified — don't merge them, their required input columns differ
-(`Rd`/`Tleaf` vs. `var`/`random_effect_col`/`Tleaf`). `fitRvT()` also has a
-`random_effect_col` argument (default `"sample"`) for its `lmer()` random
-intercept, but unlike the other three it has no fixed-effects-only
-fallback for a single-level group — `fit_Tresponse_groups()`'s own test
-relies on `lmer()`'s hard error there to drop single-curve groups, so
-don't add a silent fallback without updating that test's expectations too.
+`lme4::lmer()`, with a `var` parameter for which respiration-rate column
+to fit) are two genuinely different respiration-vs-temperature models,
+kept as separate functions rather than unified — don't merge them, their
+required input columns differ (`Rd`/`Tleaf` vs. `var`/`random_effect_col`/
+`Tleaf`). `fitRvT()` has the same `random_effect_col`
+(default `"curve_ID"`) and single-level fallback as the other three, just
+via `stats::lm()` in place of `nls()` (since its mixed model is `lmer`,
+not `nlme`) — `get_coef_table()` handles `lm`/`lmerMod` fits too, since
+`summary(.)$coefficients` has the same first-two-column shape there as well.
+
+`fit_Tresponse_groups()` splits a multi-group data frame by `group_cols`
+and calls one of the four fitters above (or a custom function) once per
+group, dropping (with a `message()`) only groups that genuinely error —
+not groups with just one curve, since each fitter now handles that itself
+via its own fallback. Don't reintroduce a group-level "enough curves to
+fit" pre-check here; that decision belongs inside each fitter, keyed off
+its own `random_effect_col`.
 
 `fit_regression()` is a general parameter-vs-x linear-regression helper
 (used e.g. for parameter-vs-MAT climate-sensitivity fits) that remains here;

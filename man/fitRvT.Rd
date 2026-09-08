@@ -4,7 +4,7 @@
 \alias{fitRvT}
 \title{Fit a mixed-model quadratic-in-log Arrhenius model to respiration vs. leaf temperature}
 \usage{
-fitRvT(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = "sample")
+fitRvT(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = "curve_ID")
 }
 \arguments{
 \item{df}{A data frame with columns \code{random_effect_col}, \code{Tleaf}
@@ -27,9 +27,10 @@ with a per-\code{random_effect_col} random effect on the intercept via
 \code{\link[lme4]{lmer}}, then back-transforms to \code{Rdark} at 25 deg
 C. Distinct from \code{\link{fitRvT_Ea}} (a Drake et al. 2015 Arrhenius
 \code{nls} fit with no random effect) — the two use different models and
-different required columns. Unlike \code{\link{fit_temperature_response}},
-\code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, there's no
-fixed-effects-only fallback here if \code{random_effect_col} has only one
-level -- \code{\link{fit_Tresponse_groups}} relies on \code{lmer()}'s
-error in that case to drop single-curve groups.
+different required columns. Like \code{\link{fit_temperature_response}},
+\code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, if
+\code{random_effect_col} only has one level in \code{df}, fits without a
+random effect (via \code{lm}) instead of erroring -- this lets
+\code{\link{fit_Tresponse_groups}} fit every group, using the mixed
+model only where a group actually has multiple curves to pool.
 }

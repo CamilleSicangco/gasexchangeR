@@ -51,14 +51,17 @@ quadratic_topt_formula = function(response)
   as.formula(paste0(response, " ~ Aopt-(b*(Tleaf-Topt)^2)"))
 }
 
-# nlme random-effect helpers ---------------------------------------------------
+# Random-effect helpers ---------------------------------------------------
 #
 # fit_temperature_response(), fit_arrhenius(), and fitAvT() all fit a model
-# with a per-group random intercept via nlme(), grouped by a column whose
-# name is now caller-specified (random_effect_col) rather than hardcoded.
-# nlme can't estimate a random effect from a single group, so these helpers
-# let each function fall back to an equivalent fixed-effects-only nls() fit
-# rather than erroring when random_effect_col only has one level.
+# with a per-group random intercept via nlme(), and fitRvT() via lme4::lmer(),
+# grouped by a column whose name is caller-specified (random_effect_col)
+# rather than hardcoded. Neither nlme nor lmer can estimate a random effect
+# from a single group, so these helpers let each function fall back to an
+# equivalent fixed-effects-only fit (nls() for the nlme-based three, lm() for
+# fitRvT()) rather than erroring when random_effect_col only has one level --
+# which lets fit_Tresponse_groups() fit every group regardless of how many
+# curves it has to pool.
 
 #' Whether a column has more than one distinct value
 #' @noRd
@@ -84,13 +87,14 @@ warn_no_random_effect = function(group_col)
   )
 }
 
-#' Fixed-effect coefficient table from either an nlme or nls fit
+#' Fixed-effect coefficient table from an nlme, nls, lm, or lmer fit
 #'
-#' \code{summary(nlme_fit)$tTable} and \code{summary(nls_fit)$coefficients}
-#' are both parameter-by-statistic matrices with \code{Value}/\code{Estimate}
-#' as column 1 and \code{Std.Error} as column 2 (nlme has extra columns
-#' after that; nls doesn't) -- so positional indexing into the first two
-#' columns behaves identically either way.
+#' \code{summary(nlme_fit)$tTable} and \code{summary(.)$coefficients} (nls,
+#' lm, and lmerMod fits all have this) are all parameter-by-statistic
+#' matrices with \code{Value}/\code{Estimate} as column 1 and
+#' \code{Std.Error} as column 2 (nlme has extra columns after that; the
+#' others don't) -- so positional indexing into the first two columns
+#' behaves identically across all of them.
 #' @noRd
 get_coef_table = function(fit)
 {
@@ -423,11 +427,12 @@ fitRvT_Ea <- function(dataresp)
 #' \code{\link[lme4]{lmer}}, then back-transforms to \code{Rdark} at 25 deg
 #' C. Distinct from \code{\link{fitRvT_Ea}} (a Drake et al. 2015 Arrhenius
 #' \code{nls} fit with no random effect) — the two use different models and
-#' different required columns. Unlike \code{\link{fit_temperature_response}},
-#' \code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, there's no
-#' fixed-effects-only fallback here if \code{random_effect_col} has only one
-#' level -- \code{\link{fit_Tresponse_groups}} relies on \code{lmer()}'s
-#' error in that case to drop single-curve groups.
+#' different required columns. Like \code{\link{fit_temperature_response}},
+#' \code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, if
+#' \code{random_effect_col} only has one level in \code{df}, fits without a
+#' random effect (via \code{lm}) instead of erroring -- this lets
+#' \code{\link{fit_Tresponse_groups}} fit every group, using the mixed
+#' model only where a group actually has multiple curves to pool.
 #'
 #' @param df A data frame with columns \code{random_effect_col}, \code{Tleaf}
 #'   (deg C), and \code{var}, with one row per respiration measurement
@@ -448,13 +453,19 @@ fitRvT <- function(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = 
     filter(Tleaf < 50) |>
     mutate(ln_R = log(!!sym(var)), Tleaf2 = Tleaf^2)
 
-  model_formula = as.formula(paste0("ln_R ~ Tleaf + Tleaf2 + (1 | ", random_effect_col, ")"))
+  use_random_effect = has_multiple_levels(df, random_effect_col)
+  if (!use_random_effect) warn_no_random_effect(random_effect_col)
 
-  try(
-    mod <- lmer(model_formula, df)
-  )
-  R.1 = summary(mod)
-  results <- (R.1$coefficients[1:6])
+  if (use_random_effect) {
+    model_formula = as.formula(paste0("ln_R ~ Tleaf + Tleaf2 + (1 | ", random_effect_col, ")"))
+    try(
+      mod <- lmer(model_formula, df)
+    )
+  } else {
+    mod <- lm(ln_R ~ Tleaf + Tleaf2, data = df)
+  }
+
+  results <- get_coef_table(mod)[1:6]
 
   Rdark25 = exp(results[1] + results[2] * 25 + results[3] * 25^2)
   Rdark25.se = sqrt((results[4])^2 + (results[5] * 25)^2 + (results[3] * 25^2)^2) * Rdark25
@@ -533,12 +544,16 @@ solve_Tspan = function(Aopt, Topt, b, span = 0.8)
 #'
 #' @return A data frame with one row per successfully-fitted group: the
 #'   \code{group_cols} values, plus \code{fit_fun}'s result columns. A group
-#'   \code{fit_fun} threw an error on (e.g. too few curves for a mixed
-#'   model's random effect) is dropped rather than fatally stopping the rest
-#'   of the batch, and reported by name with \code{message()} -- the same
-#'   \code{tryCatch()} pattern used by this package's own examples of
-#'   fitting every group in a dataset, just generalized over which column(s)
-#'   define a group
+#'   with too few curves to pool doesn't need to fail: \code{fitRvT()},
+#'   \code{fit_temperature_response()}, \code{fit_arrhenius()}, and
+#'   \code{fitAvT()} all fall back to a fixed-effects-only fit rather than
+#'   erroring when their random-effect grouping column has only one level
+#'   in a group. A group \code{fit_fun} still throws an error on for some
+#'   other reason (e.g. a model that fails to converge) is dropped rather
+#'   than fatally stopping the rest of the batch, and reported by name with
+#'   \code{message()} -- the same \code{tryCatch()} pattern used by this
+#'   package's own examples of fitting every group in a dataset, just
+#'   generalized over which column(s) define a group
 #' @export
 fit_Tresponse_groups = function(
   data,

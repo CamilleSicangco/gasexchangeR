@@ -25,12 +25,16 @@ vector (e.g. \code{fitRvT}, \code{fit_arrhenius}, \code{fitAvT})}
 \value{
 A data frame with one row per successfully-fitted group: the
   \code{group_cols} values, plus \code{fit_fun}'s result columns. A group
-  \code{fit_fun} threw an error on (e.g. too few curves for a mixed
-  model's random effect) is dropped rather than fatally stopping the rest
-  of the batch, and reported by name with \code{message()} -- the same
-  \code{tryCatch()} pattern used by this package's own examples of
-  fitting every group in a dataset, just generalized over which column(s)
-  define a group
+  with too few curves to pool doesn't need to fail: \code{fitRvT()},
+  \code{fit_temperature_response()}, \code{fit_arrhenius()}, and
+  \code{fitAvT()} all fall back to a fixed-effects-only fit rather than
+  erroring when their random-effect grouping column has only one level
+  in a group. A group \code{fit_fun} still throws an error on for some
+  other reason (e.g. a model that fails to converge) is dropped rather
+  than fatally stopping the rest of the batch, and reported by name with
+  \code{message()} -- the same \code{tryCatch()} pattern used by this
+  package's own examples of fitting every group in a dataset, just
+  generalized over which column(s) define a group
 }
 \description{
 Splits \code{data} by \code{group_cols} and applies \code{fit_fun} to
