@@ -440,7 +440,7 @@ fitRvT_Ea <- function(dataresp)
 #'   coefficients and their standard errors), \code{Rdark25}/\code{Rdark25.se},
 #'   \code{r2}, and \code{Tleaf_min}/\code{Tleaf_max}
 #' @export
-fitRvT <- function(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = "sample")
+fitRvT <- function(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = "curve_ID")
 {
   var = match.arg(var)
 
