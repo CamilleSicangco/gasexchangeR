@@ -133,9 +133,12 @@ Arrhenius `nls`) and `fitRvT()` (Heskel et al. 2016, quadratic-in-log
 which respiration-rate column to fit) are two genuinely different
 respiration-vs-temperature models, kept as separate functions rather than
 unified — don't merge them, their required input columns differ
-(`Rd`/`Tleaf` vs. `var`/`sample`/`Tleaf`). `fitRvT()`'s `sample` random
-effect is not parameterized like the other three's `random_effect_col`
-(nobody has asked for that yet).
+(`Rd`/`Tleaf` vs. `var`/`random_effect_col`/`Tleaf`). `fitRvT()` also has a
+`random_effect_col` argument (default `"sample"`) for its `lmer()` random
+intercept, but unlike the other three it has no fixed-effects-only
+fallback for a single-level group — `fit_Tresponse_groups()`'s own test
+relies on `lmer()`'s hard error there to drop single-curve groups, so
+don't add a silent fallback without updating that test's expectations too.
 
 `fit_regression()` is a general parameter-vs-x linear-regression helper
 (used e.g. for parameter-vs-MAT climate-sensitivity fits) that remains here;

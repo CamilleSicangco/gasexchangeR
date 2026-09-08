@@ -172,6 +172,12 @@ test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
   names(df)[names(df) == "R"] = "Rday"
   fit_rday = fitRvT(df, var = "Rday")
   expect_equal(unname(fit_rday["Rdark25"]), Rdark25_true, tolerance = 0.15)
+
+  # Same data again, differently-named grouping column, selected via
+  # random_effect_col=
+  names(df)[names(df) == "sample"] = "individual"
+  fit_custom_col = fitRvT(df, var = "Rday", random_effect_col = "individual")
+  expect_equal(unname(fit_custom_col["Rdark25"]), Rdark25_true, tolerance = 0.15)
 })
 
 test_that("fit_Tresponse_groups fits every group, attaches group columns, and drops failures", {

@@ -419,22 +419,28 @@ fitRvT_Ea <- function(dataresp)
 #' Fit a mixed-model quadratic-in-log Arrhenius model to respiration vs. leaf temperature
 #'
 #' Adapted from Heskel et al. 2016. Fits \code{log(var) ~ Tleaf + Tleaf^2}
-#' with a per-\code{replicate} (here, \code{sample}) random effect on the
-#' intercept via \code{\link[lme4]{lmer}}, then back-transforms to
-#' \code{Rdark} at 25 deg C. Distinct from \code{\link{fitRvT_Ea}} (a
-#' Drake et al. 2015 Arrhenius \code{nls} fit with no random effect) —
-#' the two use different models and different required columns.
+#' with a per-\code{random_effect_col} random effect on the intercept via
+#' \code{\link[lme4]{lmer}}, then back-transforms to \code{Rdark} at 25 deg
+#' C. Distinct from \code{\link{fitRvT_Ea}} (a Drake et al. 2015 Arrhenius
+#' \code{nls} fit with no random effect) — the two use different models and
+#' different required columns. Unlike \code{\link{fit_temperature_response}},
+#' \code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, there's no
+#' fixed-effects-only fallback here if \code{random_effect_col} has only one
+#' level -- \code{\link{fit_Tresponse_groups}} relies on \code{lmer()}'s
+#' error in that case to drop single-curve groups.
 #'
-#' @param df A data frame with columns \code{sample}, \code{Tleaf} (deg C),
-#'   and \code{var}, with one row per respiration measurement
+#' @param df A data frame with columns \code{random_effect_col}, \code{Tleaf}
+#'   (deg C), and \code{var}, with one row per respiration measurement
 #' @param var Name of the respiration-rate column to fit: one of
 #'   \code{"R"}, \code{"Rdark"}, \code{"Rday"}, or \code{"Rd"}
+#' @param random_effect_col Name of the column identifying groups for the
+#'   per-group random effect (e.g. individual/sample identity)
 #'
 #' @return A named numeric vector: \code{a}/\code{b}/\code{c} (fixed-effect
 #'   coefficients and their standard errors), \code{Rdark25}/\code{Rdark25.se},
 #'   \code{r2}, and \code{Tleaf_min}/\code{Tleaf_max}
 #' @export
-fitRvT <- function(df, var = c("R", "Rdark", "Rday", "Rd"))
+fitRvT <- function(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = "sample")
 {
   var = match.arg(var)
 
@@ -442,10 +448,10 @@ fitRvT <- function(df, var = c("R", "Rdark", "Rday", "Rd"))
     filter(Tleaf < 50) |>
     mutate(ln_R = log(!!sym(var)), Tleaf2 = Tleaf^2)
 
+  model_formula = as.formula(paste0("ln_R ~ Tleaf + Tleaf2 + (1 | ", random_effect_col, ")"))
+
   try(
-    mod <- lmer(
-      ln_R ~ Tleaf + Tleaf2 + (1 | sample),
-      df)
+    mod <- lmer(model_formula, df)
   )
   R.1 = summary(mod)
   results <- (R.1$coefficients[1:6])

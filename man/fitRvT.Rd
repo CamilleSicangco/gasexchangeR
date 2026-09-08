@@ -4,14 +4,17 @@
 \alias{fitRvT}
 \title{Fit a mixed-model quadratic-in-log Arrhenius model to respiration vs. leaf temperature}
 \usage{
-fitRvT(df, var = c("R", "Rdark", "Rday", "Rd"))
+fitRvT(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = "sample")
 }
 \arguments{
-\item{df}{A data frame with columns \code{sample}, \code{Tleaf} (deg C),
-and \code{var}, with one row per respiration measurement}
+\item{df}{A data frame with columns \code{random_effect_col}, \code{Tleaf}
+(deg C), and \code{var}, with one row per respiration measurement}
 
 \item{var}{Name of the respiration-rate column to fit: one of
 \code{"R"}, \code{"Rdark"}, \code{"Rday"}, or \code{"Rd"}}
+
+\item{random_effect_col}{Name of the column identifying groups for the
+per-group random effect (e.g. individual/sample identity)}
 }
 \value{
 A named numeric vector: \code{a}/\code{b}/\code{c} (fixed-effect
@@ -20,9 +23,13 @@ A named numeric vector: \code{a}/\code{b}/\code{c} (fixed-effect
 }
 \description{
 Adapted from Heskel et al. 2016. Fits \code{log(var) ~ Tleaf + Tleaf^2}
-with a per-\code{replicate} (here, \code{sample}) random effect on the
-intercept via \code{\link[lme4]{lmer}}, then back-transforms to
-\code{Rdark} at 25 deg C. Distinct from \code{\link{fitRvT_Ea}} (a
-Drake et al. 2015 Arrhenius \code{nls} fit with no random effect) —
-the two use different models and different required columns.
+with a per-\code{random_effect_col} random effect on the intercept via
+\code{\link[lme4]{lmer}}, then back-transforms to \code{Rdark} at 25 deg
+C. Distinct from \code{\link{fitRvT_Ea}} (a Drake et al. 2015 Arrhenius
+\code{nls} fit with no random effect) — the two use different models and
+different required columns. Unlike \code{\link{fit_temperature_response}},
+\code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, there's no
+fixed-effects-only fallback here if \code{random_effect_col} has only one
+level -- \code{\link{fit_Tresponse_groups}} relies on \code{lmer()}'s
+error in that case to drop single-curve groups.
 }
