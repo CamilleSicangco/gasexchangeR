@@ -112,15 +112,30 @@ response variable appeared on the left-hand side. When adding a new
 Arrhenius-family or quadratic-Topt fit, extend these builders rather than
 writing a new formula object by hand.
 
-`fit_temperature_response()`/`fit_arrhenius()` and `fitAvT()` fit models
-via `nlme::nlme()` with `replicate` as a random effect (or `stats::nls()`
-when `incl_random_effect = FALSE`); both expect a `TsK`/`Tleaf` and
-`replicate` column in their input data. `fitRvT_Ea()` (Drake et al. 2015,
+`fit_temperature_response()`/`fit_arrhenius()`/`fitAvT()` fit models via
+`nlme::nlme()` with a per-group random effect, grouped by a
+caller-specified `random_effect_col` (default `"curve_ID"`) rather than a
+hardcoded column name. `nlme` can't estimate a random effect from a single
+group, so all three fall back to an equivalent fixed-effects-only
+`stats::nls()` fit (emitting a `message()`) whenever `random_effect_col`
+has fewer than 2 distinct levels in the input data, instead of erroring —
+`fitAvT()`'s `incl_random_effect = FALSE` still forces the `nls` path
+regardless of level count. The shared helpers behind this
+(`has_multiple_levels()`, `random_intercept_formula()`, `get_coef_table()`,
+`get_anova_pvalue()`, all `@noRd` near the top of `fit_Tresponses.R`) exist
+because `nlme`'s `summary()$tTable` and `nls`'s `summary()$coefficients`
+put `Value`/`Estimate` and `Std.Error` in the same first two columns, and
+`nlme::anova.lme()`/`stats::anova.nls()` name their p-value column
+differently — extend these helpers rather than re-deriving the
+engine-dispatch logic per function. `fitRvT_Ea()` (Drake et al. 2015,
 Arrhenius `nls`) and `fitRvT()` (Heskel et al. 2016, quadratic-in-log
-`lme4::lmer()` with a per-`sample` random effect) are two genuinely
-different respiration-vs-temperature models, kept as separate functions
-rather than unified — don't merge them, their required input columns differ
-(`Rd`/`Tleaf` vs. `R`/`sample`/`Tleaf`).
+`lme4::lmer()` with a per-`sample` random effect, and a `var` parameter for
+which respiration-rate column to fit) are two genuinely different
+respiration-vs-temperature models, kept as separate functions rather than
+unified — don't merge them, their required input columns differ
+(`Rd`/`Tleaf` vs. `var`/`sample`/`Tleaf`). `fitRvT()`'s `sample` random
+effect is not parameterized like the other three's `random_effect_col`
+(nobody has asked for that yet).
 
 `fit_regression()` is a general parameter-vs-x linear-regression helper
 (used e.g. for parameter-vs-MAT climate-sensitivity fits) that remains here;

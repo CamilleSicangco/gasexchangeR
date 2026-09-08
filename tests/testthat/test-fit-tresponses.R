@@ -48,8 +48,9 @@ test_that("QUADP returns the larger root of a quadratic, and handles degenerate 
   expect_warning(expect_equal(QUADP(1, 0, 1), 0), "IMAGINARY ROOTS")
 })
 
-# Synthetic temperature-response data with a per-replicate random effect on
-# k25, for fit_arrhenius()/fit_temperature_response().
+# Synthetic temperature-response data with a per-curve_ID random effect on
+# k25, for fit_arrhenius()/fit_temperature_response() (curve_ID being their
+# default random_effect_col).
 simulate_arrhenius_data = function(
   k25 = 60,
   Ea = 50,
@@ -63,9 +64,9 @@ simulate_arrhenius_data = function(
 ) {
   set.seed(seed)
   TsK = rep(Tleaf_C, each = n_rep) + 273.15
-  replicate = rep(paste0("R", seq_len(n_rep)), times = length(Tleaf_C))
+  curve_ID = rep(paste0("R", seq_len(n_rep)), times = length(Tleaf_C))
   rep_effect = stats::setNames(rnorm(n_rep, 0, rep_sd), paste0("R", seq_len(n_rep)))
-  k25_i = k25 + rep_effect[replicate]
+  k25_i = k25 + rep_effect[curve_ID]
 
   y = if (is.null(delS)) {
     k25_i * exp((Ea * (TsK - 298.15)) / (298.15 * 0.008314 * TsK))
@@ -76,7 +77,7 @@ simulate_arrhenius_data = function(
   }
   y = y + rnorm(length(y), 0, noise_sd)
 
-  df = data.frame(TsK = TsK, replicate = replicate, y = y)
+  df = data.frame(TsK = TsK, curve_ID = curve_ID, y = y)
   names(df)[3] = response
   df
 }
@@ -100,6 +101,28 @@ test_that("fit_arrhenius recovers known Jmax25/Ea from synthetic data", {
   expect_equal(unname(fit["EaJ"]), 40, tolerance = 0.15)
 })
 
+test_that("fit_arrhenius fits without error using a custom random_effect_col", {
+  dat = simulate_arrhenius_data(k25 = 60, Ea = 50, response = "Vcmax", seed = 21)
+  names(dat)[names(dat) == "curve_ID"] = "individual"
+
+  fit = fit_arrhenius(dat, response = "Vcmax", random_effect_col = "individual")
+
+  expect_equal(unname(fit["Vcmax25"]), 60, tolerance = 0.1)
+})
+
+test_that("fit_arrhenius falls back to a fixed-effects fit when random_effect_col has one level", {
+  dat = simulate_arrhenius_data(k25 = 60, Ea = 50, response = "Vcmax", seed = 21)
+  dat$curve_ID = "only_one_curve"
+
+  expect_message(
+    fit <- fit_arrhenius(dat, response = "Vcmax"),
+    "Only one level of 'curve_ID'"
+  )
+
+  expect_false(anyNA(fit))
+  expect_true(all(c("Vcmax25", "EaV", "R2_Arr") %in% names(fit)))
+})
+
 test_that("fit_temperature_response recovers known peaked-Arrhenius parameters", {
   dat = simulate_arrhenius_data(k25 = 60, Ea = 50, delS = 0.64, response = "Vcmax",
                                  noise_sd = 0.5, seed = 23)
@@ -112,6 +135,20 @@ test_that("fit_temperature_response recovers known peaked-Arrhenius parameters",
 
   fit_arr = fit_temperature_response(dat, response = "Vcmax", return = "Arr")
   expect_true(all(c("Vcmax25", "EaV", "R2_Arr", "R2_Peak", "AIC_Arr", "AIC_Peak", "prob_V") %in% names(fit_arr)))
+})
+
+test_that("fit_temperature_response falls back to fixed-effects fits when random_effect_col has one level", {
+  dat = simulate_arrhenius_data(k25 = 60, Ea = 50, delS = 0.64, response = "Vcmax",
+                                 noise_sd = 0.5, seed = 23)
+  dat$curve_ID = "only_one_curve"
+
+  expect_message(
+    fit <- fit_temperature_response(dat, response = "Vcmax", return = "Peak"),
+    "Only one level of 'curve_ID'"
+  )
+
+  expect_false(anyNA(fit))
+  expect_true(all(c("Vcmax25", "EaV", "R2_Arr", "R2_Peak", "AIC_Arr", "AIC_Peak", "prob_V") %in% names(fit)))
 })
 
 test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
@@ -130,6 +167,11 @@ test_that("fitRvT recovers a known Q10-type respiration-temperature response", {
   Rdark25_true = exp(a_true + b_true * 25 + c_true * 25^2)
   expect_equal(unname(fit["Rdark25"]), Rdark25_true, tolerance = 0.15)
   expect_true(unname(fit["r2"]) > 0.9)
+
+  # Same data, differently-named respiration column, selected via var=
+  names(df)[names(df) == "R"] = "Rday"
+  fit_rday = fitRvT(df, var = "Rday")
+  expect_equal(unname(fit_rday["Rdark25"]), Rdark25_true, tolerance = 0.15)
 })
 
 test_that("fit_Tresponse_groups fits every group, attaches group columns, and drops failures", {
@@ -180,12 +222,12 @@ test_that("fitAvT recovers a known quadratic Topt response", {
   set.seed(24)
   n_rep = 4
   Tleaf = rep(seq(15, 40, by = 5), each = n_rep)
-  replicate = rep(paste0("R", seq_len(n_rep)), times = length(unique(Tleaf)))
+  curve_ID = rep(paste0("R", seq_len(n_rep)), times = length(unique(Tleaf)))
   Aopt_true = 20
   Topt_true = 28
   b_true = 0.03
   A250 = Aopt_true - b_true * (Tleaf - Topt_true)^2 + rnorm(length(Tleaf), 0, 0.3)
-  df = data.frame(Tleaf = Tleaf, replicate = replicate, A250 = A250)
+  df = data.frame(Tleaf = Tleaf, curve_ID = curve_ID, A250 = A250)
 
   fit = fitAvT(df, var = "A250", incl_random_effect = TRUE)
 
@@ -194,4 +236,27 @@ test_that("fitAvT recovers a known quadratic Topt response", {
 
   fit_fixed = fitAvT(df, var = "A250", incl_random_effect = FALSE)
   expect_equal(unname(fit_fixed["A250opt"]), Aopt_true, tolerance = 0.1)
+
+  # Custom random_effect_col name
+  names(df)[names(df) == "curve_ID"] = "individual"
+  fit_custom_col = fitAvT(df, var = "A250", random_effect_col = "individual")
+  expect_equal(unname(fit_custom_col["A250opt"]), Aopt_true, tolerance = 0.1)
+})
+
+test_that("fitAvT falls back to a fixed-effects fit when random_effect_col has one level", {
+  set.seed(24)
+  n_rep = 4
+  Tleaf = rep(seq(15, 40, by = 5), each = n_rep)
+  Aopt_true = 20
+  Topt_true = 28
+  b_true = 0.03
+  A250 = Aopt_true - b_true * (Tleaf - Topt_true)^2 + rnorm(length(Tleaf), 0, 0.3)
+  df = data.frame(Tleaf = Tleaf, curve_ID = "only_one_curve", A250 = A250)
+
+  expect_message(
+    fit <- fitAvT(df, var = "A250", incl_random_effect = TRUE),
+    "Only one level of 'curve_ID'"
+  )
+
+  expect_equal(unname(fit["A250opt"]), Aopt_true, tolerance = 0.1)
 })

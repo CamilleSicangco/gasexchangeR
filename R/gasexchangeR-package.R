@@ -20,7 +20,7 @@
 # cannot tell apart from genuinely undefined global variables.
 utils::globalVariables(c(
   "A", "Ac250", "Aj250", "Ci", "E", "Fan", "Flow", "Gamma_star_tl_avg",
-  "HHMMSS", "Jmax_tl", "PARi", "Pa", "Patm", "Photo", "R", "RHcham",
+  "HHMMSS", "Jmax_tl", "PARi", "Pa", "Patm", "Photo", "RHcham",
   "RL_tl_avg", "S", "Tirga", "Tleaf", "Tleaf.x", "TleafCnd_avg", "Tp_tl_avg",
   "Vcmax_tl_avg", "curve_ID", "location", "method", "par", "sp_code",
   "species"
