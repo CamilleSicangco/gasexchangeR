@@ -7,19 +7,23 @@
 fitAvT(
   df,
   var = c("A250", "Ac250", "Aj250", "A275", "A"),
-  incl_random_effect = TRUE
+  incl_random_effect = TRUE,
+  random_effect_col = "curve_ID"
 )
 }
 \arguments{
-\item{df}{A data frame with columns \code{Tleaf}, \code{replicate}, and
-\code{var}}
+\item{df}{A data frame with columns \code{Tleaf}, \code{random_effect_col},
+and \code{var}}
 
 \item{var}{Which response variable to fit: \code{"A250"}, \code{"Ac250"},
 \code{"Aj250"}, \code{"A275"}, or the fully dynamic \code{"A"}}
 
-\item{incl_random_effect}{Whether to fit a per-\code{replicate} random
-effect on \code{Aopt} (via \code{nlme}) or a fixed-effects-only fit
-(via \code{nls})}
+\item{incl_random_effect}{Whether to fit a per-\code{random_effect_col}
+random effect on \code{Aopt} (via \code{nlme}) or a fixed-effects-only
+fit (via \code{nls})}
+
+\item{random_effect_col}{Name of the column identifying groups for the
+per-group random effect (e.g. individual/curve identity)}
 }
 \value{
 A named numeric vector of fitted parameters, standard errors, and
@@ -29,5 +33,8 @@ A named numeric vector of fitted parameters, standard errors, and
 \description{
 Fits a quadratic Topt model (\code{A ~ Aopt - b*(Tleaf - Topt)^2}) to net
 assimilation vs. Tleaf for a chosen fixed-Ci response variable, with or
-without a per-replicate random effect.
+without a per-\code{random_effect_col} random effect. If
+\code{incl_random_effect} is \code{TRUE} but \code{random_effect_col}
+only has one level in \code{df}, fits without a random effect instead of
+erroring.
 }

@@ -4,14 +4,21 @@
 \alias{fit_arrhenius}
 \title{Fit a standard Arrhenius temperature response only}
 \usage{
-fit_arrhenius(dat, response = c("Vcmax", "Jmax"))
+fit_arrhenius(
+  dat,
+  response = c("Vcmax", "Jmax"),
+  random_effect_col = "curve_ID"
+)
 }
 \arguments{
 \item{dat}{A data frame with columns \code{TsK} (leaf temperature, K),
-\code{replicate}, and \code{response}}
+\code{random_effect_col}, and \code{response}}
 
 \item{response}{Which response variable to fit: \code{"Vcmax"} or
 \code{"Jmax"}}
+
+\item{random_effect_col}{Name of the column identifying groups for the
+per-group random effect (e.g. individual/curve identity)}
 }
 \value{
 A named numeric vector of fitted parameters, standard errors, and
@@ -19,9 +26,11 @@ A named numeric vector of fitted parameters, standard errors, and
 }
 \description{
 Fits only the standard (non-peaked) Arrhenius model to \code{Vcmax} or
-\code{Jmax} vs. leaf temperature, with \code{replicate} as a random
-effect — simpler than \code{\link{fit_temperature_response}}\code{(return
-= "Arr")}, which also fits the peaked model for comparison. Replaces the
-previously separate \code{fitarh()} (Vcmax) and \code{fitarhJ()} (Jmax)
-functions.
+\code{Jmax} vs. leaf temperature, with a per-\code{random_effect_col}
+random effect — simpler than
+\code{\link{fit_temperature_response}}\code{(return = "Arr")}, which also
+fits the peaked model for comparison. If \code{random_effect_col} only
+has one level in \code{dat}, fits without a random effect (via
+\code{nls}) instead of erroring. Replaces the previously separate
+\code{fitarh()} (Vcmax) and \code{fitarhJ()} (Jmax) functions.
 }

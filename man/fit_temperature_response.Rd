@@ -8,12 +8,13 @@ fit_temperature_response(
   dat,
   response = c("Vcmax", "Jmax"),
   return = c("Arr", "Peak"),
-  start = c(k25 = 100, Ea = 60, delS = 0.64)
+  start = c(k25 = 100, Ea = 60, delS = 0.64),
+  random_effect_col = "curve_ID"
 )
 }
 \arguments{
 \item{dat}{A data frame with columns \code{TsK} (leaf temperature, K),
-\code{replicate}, and \code{response}}
+\code{random_effect_col}, and \code{response}}
 
 \item{response}{Which response variable to fit: \code{"Vcmax"} or
 \code{"Jmax"}}
@@ -22,6 +23,9 @@ fit_temperature_response(
 Arrhenius) or \code{"Peak"} (peaked Arrhenius, plus its fitted Topt)}
 
 \item{start}{Starting values for the peaked-Arrhenius fit}
+
+\item{random_effect_col}{Name of the column identifying groups for the
+per-group random effect (e.g. individual/curve identity)}
 }
 \value{
 A one-row data frame of fitted parameters and standard errors,
@@ -31,7 +35,9 @@ A one-row data frame of fitted parameters and standard errors,
 \description{
 Fits a peaked Arrhenius model (with an entropy term) and a standard
 Arrhenius model to \code{Vcmax} or \code{Jmax} vs. leaf temperature, with
-\code{replicate} as a random effect, and compares the two via AIC/anova.
+a per-\code{random_effect_col} random effect, and compares the two via
+AIC/anova. If \code{random_effect_col} only has one level in \code{dat},
+fits without a random effect (via \code{nls}) instead of erroring.
 Replaces the previously separate \code{fitpeaked()} (Vcmax) and
 \code{fitpeakedJ()} (Jmax) functions.
 }

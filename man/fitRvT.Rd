@@ -4,11 +4,17 @@
 \alias{fitRvT}
 \title{Fit a mixed-model quadratic-in-log Arrhenius model to respiration vs. leaf temperature}
 \usage{
-fitRvT(df)
+fitRvT(df, var = c("R", "Rdark", "Rday", "Rd"), random_effect_col = "curve_ID")
 }
 \arguments{
-\item{df}{A data frame with columns \code{R}, \code{sample}, and
-\code{Tleaf} (deg C), with one row per respiration measurement}
+\item{df}{A data frame with columns \code{random_effect_col}, \code{Tleaf}
+(deg C), and \code{var}, with one row per respiration measurement}
+
+\item{var}{Name of the respiration-rate column to fit: one of
+\code{"R"}, \code{"Rdark"}, \code{"Rday"}, or \code{"Rd"}}
+
+\item{random_effect_col}{Name of the column identifying groups for the
+per-group random effect (e.g. individual/sample identity)}
 }
 \value{
 A named numeric vector: \code{a}/\code{b}/\code{c} (fixed-effect
@@ -16,10 +22,15 @@ A named numeric vector: \code{a}/\code{b}/\code{c} (fixed-effect
   \code{r2}, and \code{Tleaf_min}/\code{Tleaf_max}
 }
 \description{
-Adapted from Heskel et al. 2016. Fits \code{log(R) ~ Tleaf + Tleaf^2} with
-a per-\code{replicate} (here, \code{sample}) random effect on the
-intercept via \code{\link[lme4]{lmer}}, then back-transforms to
-\code{Rdark} at 25 deg C. Distinct from \code{\link{fitRvT_Ea}} (a
-Drake et al. 2015 Arrhenius \code{nls} fit with no random effect) —
-the two use different models and different required columns.
+Adapted from Heskel et al. 2016. Fits \code{log(var) ~ Tleaf + Tleaf^2}
+with a per-\code{random_effect_col} random effect on the intercept via
+\code{\link[lme4]{lmer}}, then back-transforms to \code{Rdark} at 25 deg
+C. Distinct from \code{\link{fitRvT_Ea}} (a Drake et al. 2015 Arrhenius
+\code{nls} fit with no random effect) — the two use different models and
+different required columns. Like \code{\link{fit_temperature_response}},
+\code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, if
+\code{random_effect_col} only has one level in \code{df}, fits without a
+random effect (via \code{lm}) instead of erroring -- this lets
+\code{\link{fit_Tresponse_groups}} fit every group, using the mixed
+model only where a group actually has multiple curves to pool.
 }
