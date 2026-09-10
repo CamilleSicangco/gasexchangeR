@@ -74,7 +74,7 @@ organise_data_for_PhotoGEA = function(
 #' @return A PhotoGEA fit-result list (\code{fits}, \code{parameters},
 #'   \code{fits_interpolated})
 #' @noRd
-fit_ACis_PhotGEA = function(
+fit_ACis_PhotoGEA = function(
   licor_exdf,
   identifier_columns,
   Ca_atmospheric = 420
@@ -102,7 +102,11 @@ fit_ACis_PhotGEA = function(
   )
 
   # Calculate Jmax
-  ACi_fits$parameters <- calculate_jmax(ACi_fits$parameters, alpha_j_at_25 = 0.24, theta_j_at_25 = 0.85)
+  ACi_fits$parameters <- calculate_jmax(
+    ACi_fits$parameters, 
+    alpha_j_at_25 = 0.24, 
+    theta_j_at_25 = 0.85
+  )
 
   return(ACi_fits)
 }
@@ -113,7 +117,7 @@ fit_ACis_PhotGEA = function(
 #' \code{engine = "PhotoGEA"}.
 #'
 #' @param fit_result A PhotoGEA fit-result list from
-#'   \code{\link{fit_ACis_PhotGEA}}
+#'   \code{\link{fit_ACis_PhotoGEA}}
 #' @param Ci Target intercellular CO2 concentration, ppm
 #' @param val Which interpolated assimilation rate to extract
 #'
@@ -192,7 +196,7 @@ fit_ACis = function(
 
   if (engine == "PhotoGEA") {
     organised = organise_data_for_PhotoGEA(data, identifier_columns = group_cols)
-    fits = fit_ACis_PhotGEA(organised, identifier_columns = group_cols, Ca_atmospheric = Ca_atmospheric)
+    fits = fit_ACis_PhotoGEA(organised, identifier_columns = group_cols, Ca_atmospheric = Ca_atmospheric)
   } else {
     df = data.frame(data) |>
       dplyr::rename(Photo = A, PARi = !!sym(PAR_col)) |>
