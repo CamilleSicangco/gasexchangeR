@@ -426,14 +426,25 @@ plot_c3_aci_fit_indiv = function(
                 fit_results$parameters$main_data$sample[identifier_column_val], ", Tleaf = ",
                 round(fit_results$parameters$main_data$TleafCnd_avg[identifier_column_val], digits = 1))
 
+  curve_interpolated <-
+    subset(fit_results$fits_interpolated$main_data, curve_ID == identifier_column_val)
+
+  # Scale the y-axis to the fitted An curve rather than letting lattice's
+  # default auto-scaling span Ac/Aj/Ap/Ad too -- Ap in particular can shoot
+  # off to a near-vertical asymptote at low Ci, which would otherwise
+  # squash the An/Ac/Aj curves into an unreadable sliver.
+  ymin <- min(curve_interpolated$An) - 2
+  ymax <- max(curve_interpolated$An) + 5
+
   lattice::xyplot(An + Ac + Aj + Ap + Ad ~ Ci,
-                  subset(fit_results$fits_interpolated$main_data, curve_ID == identifier_column_val),
+                  curve_interpolated,
                   type = 'l',
                   par.settings = list(superpose.line = line_settings),
                   auto.key = list(space = 'right', lines = TRUE, points = FALSE),
                   ylab = expression(A[n]~(mu*mol~m^-2~s^-1)),
                   xlab = expression(C[i]*" (ppm)"),
                   main = title,
+                  ylim = c(ymin, ymax),
                   panel = function(...) {
                     curve_parameters <-
                       fit_results$parameters[fit_results$parameters[, identifier_column_name] == identifier_column_val, ]
