@@ -326,6 +326,17 @@ extract_curve_params_plantecophys = function(fit, data, byname)
 extract_curve_params_photogea = function(fits_exdf, data, byname)
 {
   ret = fits_exdf$parameters$main_data
+
+  # Determine the merge keys now, from the untouched pass-through columns,
+  # before any renaming or derived columns are added below. Otherwise a
+  # later-created column name that happens to collide with an unrelated
+  # column already in `data` (e.g. renaming TleafCnd_avg to Tleaf below,
+  # when `data` already has its own, differently-grained, per-point Tleaf
+  # column) gets mistaken for a shared identifier and pulled into the
+  # merge, silently dropping every row since a single per-curve average
+  # essentially never equals any individual point's raw value.
+  col_match = intersect(colnames(data), colnames(ret))
+
   ret$Jmax_tl[is.infinite(ret$Jmax_tl)] <- NA
   ret$R2 <- get_r2(fits_exdf, engine = "PhotoGEA")
 
@@ -358,8 +369,20 @@ extract_curve_params_photogea = function(fits_exdf, data, byname)
     mutate(TsK = Tleaf + 273.15)
 
   # merge with original data frame to get info on curve
-  col_match = intersect(colnames(data), colnames(ret))
   ret = merge(ret, data, by = col_match)
+
+  # If `data` has its own Tleaf column (a per-point raw reading, distinct
+  # from the fitted curve-level average just renamed above), it isn't a
+  # merge key -- by design, see col_match above -- so merge() suffixes both
+  # as Tleaf.x/Tleaf.y instead of colliding. Keep the fitted average as the
+  # curve-level `Tleaf` (matching extract_curve_params_plantecophys()'s
+  # equivalent Tleaf.x/Tleaf.y handling) and drop the raw duplicate.
+  if ("Tleaf.x" %in% colnames(ret)) {
+    ret = ret |>
+      dplyr::rename(Tleaf = Tleaf.x) |>
+      dplyr::select(-Tleaf.y)
+  }
+
   ret = ret |>
     group_by(!!sym(byname)) |>
     summarise(across(!c(E:Tirga), first),
