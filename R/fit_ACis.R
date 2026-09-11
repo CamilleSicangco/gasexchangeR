@@ -34,12 +34,24 @@ organise_data_for_PhotoGEA = function(
     # Make sure the data meets basic requirements
     check_response_curve_data(x, identifier_columns, npts, 'Ca', driving_column_tolerance = Inf)
 
-    # Remove points with duplicated `Ca` values and order by `Ci`
+    # Remove points with duplicated `Ca` values and order by `Ca`. Ordering
+    # by `Ci` instead (as this used to) is usually equivalent, since Ci
+    # normally increases with Ca -- but for any curve with even a local dip
+    # or instability in the Ci-vs-Ca relationship, ordering by Ci scrambles
+    # the Ca order. PhotoGEA::estimate_operating_point() then interpolates
+    # Cc against Ca using `approx(..., ties = list("ordered", mean))`, which
+    # requires Ca to already be sorted -- with scrambled Ca, "ordered" tie
+    # handling silently returns NA instead of erroring, which cascades into
+    # a 0-row exdf assignment and a cryptic "replacement has 1 row, data has
+    # 0" error deep inside PhotoGEA. Ordering by Ca directly avoids this;
+    # verified this doesn't change fitted Vcmax/Jmax/etc for curves that
+    # were already fitting successfully (only the operating-point row
+    # selection depends on this order).
     organize_response_curve_data(
       x,
       identifier_columns,
       c(),
-      column_for_ordering = 'Ci',
+      column_for_ordering = 'Ca',
       columns_to_average = c('TleafCnd', 'Qin')
     )
   })
