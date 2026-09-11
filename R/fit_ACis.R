@@ -143,6 +143,18 @@ extract_val_fixedCi = function(
 {
   fits.l = split(fit_result$fits_interpolated$main_data, fit_result$fits_interpolated$main_data$curve_ID)
   val_out = sapply(fits.l, function(df) {
+    # A curve whose fit failed entirely (e.g. no reliable Vcmax) has Ci ==
+    # NA for every interpolated point, so which.min() finds no minimum and
+    # returns integer(0) -- df[[val]][integer(0)] is then length 0 instead
+    # of the length-1 result every other curve produces. Left as-is, that
+    # breaks sapply()'s simplification to a plain vector for the *entire*
+    # batch (falling back to a list), which only surfaces much later as an
+    # opaque "comparison of these types is not implemented" when the list
+    # is compared with `<`. Degrade explicitly to NA here instead, so one
+    # failed curve can't corrupt every other curve's result type.
+    if (all(is.na(df$Ci))) {
+      return(NA_real_)
+    }
     i = which.min(abs(Ci - df$Ci))
     df[[val]][i]
   })
