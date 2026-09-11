@@ -97,13 +97,39 @@ fit_ACis_PhotoGEA = function(
   # are reproducible.
   set.seed(1234)
 
-  # Fit the A-Ci curves
-  ACi_fits <- consolidate(by(
+  # Fit each curve, catching any per-curve error (e.g. a curve too short/
+  # sparse for one of PhotoGEA's internal grid-construction steps) so a
+  # single bad curve can't take down the fit for every other curve in the
+  # dataset -- by() itself has no such isolation; an uncaught error in any
+  # one group aborts the whole call. A failing curve is warned about by
+  # name and then dropped entirely (not NA-filled): consolidate() requires
+  # every element to share the same list structure, and there's no
+  # meaningful partial fit_c3_aci() result to fabricate for a curve whose
+  # fit crashed outright. Curves absent from the final result should be
+  # checked for by missing curve_ID, not by NA values.
+  by_result <- by(
     licor_exdf,                       # The `exdf` object containing the curves
     licor_exdf[, identifier_columns], # A factor used to split `gasex_data` into chunks
-    fit_c3_aci,                       # The function to apply to each chunk of `gasex_data`
+    function(x, ...) {
+      tryCatch(
+        fit_c3_aci(x, ...),
+        error = function(e) {
+          curve_id <- unique(x[, identifier_columns])
+          warning(
+            "fit_c3_aci() failed for curve(s) ", paste(curve_id, collapse = ", "),
+            ": ", conditionMessage(e), " -- excluded from the fit results.",
+            call. = FALSE
+          )
+          NULL
+        }
+      )
+    },
     Ca_atmospheric = Ca_atmospheric   # Additional argument passed to `fit_c3_aci`
-  ))
+  )
+  by_result <- by_result[!vapply(by_result, is.null, logical(1))]
+
+  # Fit the A-Ci curves
+  ACi_fits <- consolidate(by_result)
 
   # Calculate temperature-dependent values of Jmax-related parameters
   # (a lazy-loaded PhotoGEA dataset, so it can't be @importFrom'd)
