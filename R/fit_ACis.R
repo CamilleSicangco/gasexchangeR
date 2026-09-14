@@ -335,6 +335,14 @@ get_r2 = function(
 #'   A/Ac/Aj/Ap at (PhotoGEA engine only; ignored for \code{"plantecophys"}).
 #'   Defaults to \code{c(250, 275, 360)}, matching this function's original,
 #'   fixed set of extraction points.
+#' @param average_cols Length-2 character vector naming the two ends of a
+#'   positional range of columns in the merged data (PhotoGEA engine only;
+#'   ignored for \code{"plantecophys"}) to average across a curve's points
+#'   when collapsing to one row per curve, rather than just keep the first
+#'   value like every other merged column -- e.g. raw per-point gas-exchange
+#'   readings that vary within a curve. Defaults to \code{c("E", "Tirga")};
+#'   pass the two columns bounding the equivalent range in your own data if
+#'   they're named differently (e.g. \code{c("gsw", "Pa")}).
 #'
 #' @return \code{data}, with fitted curve parameters merged on
 #' @export
@@ -343,13 +351,14 @@ extract_curve_params = function(
   data,
   byname,
   engine = c("PhotoGEA", "plantecophys"),
-  Ci_targets = c(250, 275, 360)
+  Ci_targets = c(250, 275, 360),
+  average_cols = c("E", "Tirga")
 )
 {
   engine = match.arg(engine)
 
   if (engine == "PhotoGEA") {
-    extract_curve_params_photogea(fit_result, data, byname, Ci_targets = Ci_targets)
+    extract_curve_params_photogea(fit_result, data, byname, Ci_targets = Ci_targets, average_cols = average_cols)
   } else {
     extract_curve_params_plantecophys(fit_result, data, byname)
   }
@@ -393,7 +402,8 @@ extract_curve_params_plantecophys = function(fit, data, byname)
 }
 
 #' @noRd
-extract_curve_params_photogea = function(fits_exdf, data, byname, Ci_targets = c(250, 275, 360))
+extract_curve_params_photogea = function(fits_exdf, data, byname, Ci_targets = c(250, 275, 360),
+                                          average_cols = c("E", "Tirga"))
 {
   ret = fits_exdf$parameters$main_data
 
@@ -447,10 +457,19 @@ extract_curve_params_photogea = function(fits_exdf, data, byname, Ci_targets = c
       dplyr::select(-Tleaf.y)
   }
 
+  # average_cols names the two ends of a positional range of per-point
+  # columns (e.g. raw gas-exchange readings) to average across a curve's
+  # points, rather than keep just the first value like every other column;
+  # resolved against ret's actual column order at this point rather than
+  # hardcoded, since which columns fall "inside the range" depends on where
+  # these two boundary columns happen to sit in a given caller's own data.
+  range_idx = which(names(ret) == average_cols[1]):which(names(ret) == average_cols[2])
+  range_cols = names(ret)[range_idx]
+
   ret = ret |>
     group_by(!!sym(byname)) |>
-    summarise(across(!c(E:Tirga), first),
-              across(E:Tirga, mean),
+    summarise(across(!dplyr::all_of(range_cols), first),
+              across(dplyr::all_of(range_cols), mean),
               .groups = "drop")
   return(ret)
 }
