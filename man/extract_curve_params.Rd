@@ -8,7 +8,8 @@ extract_curve_params(
   fit_result,
   data,
   byname,
-  engine = c("PhotoGEA", "plantecophys")
+  engine = c("PhotoGEA", "plantecophys"),
+  Ci_targets = c(250, 275, 360)
 )
 }
 \arguments{
@@ -18,10 +19,18 @@ extract_curve_params(
 parameters onto}
 
 \item{byname}{Column name(s) to merge \code{fit_result}'s parameters onto
-\code{data} by}
+\code{data} by. For the PhotoGEA engine this is also the per-curve
+identifier column used internally for R^2 and fixed-Ci extraction (the
+same column \code{group_cols} named when calling \code{\link{fit_ACis}}),
+not a separate assumption of its own.}
 
 \item{engine}{Curve-fitting engine the fit came from: \code{"PhotoGEA"}
 (default) or \code{"plantecophys"}}
+
+\item{Ci_targets}{Intercellular CO2 concentrations (ppm) to extract
+A/Ac/Aj/Ap at (PhotoGEA engine only; ignored for \code{"plantecophys"}).
+Defaults to \code{c(250, 275, 360)}, matching this function's original,
+fixed set of extraction points.}
 }
 \value{
 \code{data}, with fitted curve parameters merged on

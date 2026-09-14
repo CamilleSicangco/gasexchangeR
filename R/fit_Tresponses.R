@@ -315,13 +315,24 @@ fit_arrhenius = function(
 #'
 #' @param df A data frame with columns \code{Tleaf}, \code{random_effect_col},
 #'   and \code{var}
-#' @param var Which response variable to fit: \code{"A250"}, \code{"Ac250"},
-#'   \code{"Aj250"}, \code{"A275"}, or the fully dynamic \code{"A"}
+#' @param var Name of the response variable to fit. \code{"A250"},
+#'   \code{"Ac250"}, \code{"Aj250"}, \code{"A275"}, and \code{"A"} are
+#'   recognized presets with their own historical output-column naming;
+#'   any other column name is also accepted (output columns are then named
+#'   from \code{var} itself, e.g. \code{paste0(var, "opt")}), so a
+#'   project-specific response column (e.g. \code{"A_forfitting"}) doesn't
+#'   require a package change
 #' @param incl_random_effect Whether to fit a per-\code{random_effect_col}
 #'   random effect on \code{Aopt} (via \code{nlme}) or a fixed-effects-only
 #'   fit (via \code{nls})
 #' @param random_effect_col Name of the column identifying groups for the
 #'   per-group random effect (e.g. individual/curve identity)
+#' @param Topt_start Starting value for \code{Topt}. Either a fixed number,
+#'   or \code{"observed_max"} (the default) to start at
+#'   \code{df$Tleaf[which.max(df[[var]])]} instead -- important when a fit
+#'   group's temperature range is far from a fixed default like 25, which can
+#'   otherwise leave the optimizer starting far from the data and prone to
+#'   non-convergence
 #'
 #' @return A named numeric vector of fitted parameters, standard errors, and
 #'   the temperature span (\code{Tspan}) for a target fraction of Aopt (see
@@ -329,16 +340,21 @@ fit_arrhenius = function(
 #' @export
 fitAvT = function(
   df,
-  var = c("A250", "Ac250", "Aj250", "A275", "A"),
+  var = "A250",
   incl_random_effect = TRUE,
-  random_effect_col = "curve_ID"
+  random_effect_col = "curve_ID",
+  Topt_start = "observed_max"
 )
 {
-  var = match.arg(var)
   df = df |> filter(!is.na(!!sym(var)))
 
   formula_v = quadratic_topt_formula(var)
-  start_vals = c(Aopt = max(df[[var]]), Topt = 25, b = 0.05)
+  topt_start_val = if (identical(Topt_start, "observed_max")) {
+    df$Tleaf[which.max(df[[var]])]
+  } else {
+    Topt_start
+  }
+  start_vals = c(Aopt = max(df[[var]]), Topt = topt_start_val, b = 0.05)
 
   use_random_effect = isTRUE(incl_random_effect) && has_multiple_levels(df, random_effect_col)
   if (isTRUE(incl_random_effect) && !use_random_effect) warn_no_random_effect(random_effect_col)
@@ -346,16 +362,27 @@ fitAvT = function(
   if (!use_random_effect) {
     A_Topt <- nls(formula_v, data = df, start = as.list(start_vals))
   } else {
-    A_Topt <- nlme(model = formula_v,
-                   fixed = (Aopt + b + Topt ~ 1),
-                   random = random_intercept_formula("Aopt", random_effect_col),
-                   data = df,
-                   start = start_vals)
+    # nlme's random-effect variance component can be singular for groups with
+    # a narrow temperature range or few random-effect levels, which makes
+    # nlme error out instead of returning a fit -- fall back to a plain nls
+    # fit (no random effect) so the group isn't dropped entirely, rather than
+    # only falling back when random_effect_col itself has a single level.
+    A_Topt <- tryCatch(
+      nlme(model = formula_v,
+           fixed = (Aopt + b + Topt ~ 1),
+           random = random_intercept_formula("Aopt", random_effect_col),
+           data = df,
+           start = start_vals),
+      error = function(e) NULL
+    )
+    if (is.null(A_Topt)) {
+      A_Topt <- nls(formula_v, data = df, start = as.list(start_vals))
+    }
   }
 
   A_Topt2 <- summary(A_Topt)
 
-  if (!use_random_effect) {
+  if (!inherits(A_Topt, "nlme")) {
     Tspan <- solve_Tspan(Aopt = A_Topt2$coefficients[1],
                          Topt = A_Topt2$coefficients[2],
                          b = A_Topt2$coefficients[3])
@@ -371,10 +398,18 @@ fitAvT = function(
     results <- c(A_Topt2$tTable[c(1, 3, 2, 4, 6, 5)], Tspan, Tspan.se)
   }
 
-  # var -> (name prefix, "b"/"Tspan" suffix) — the only thing that varied
-  # across the branches of the original var-specific implementations
-  prefix = switch(var, A250 = "A250", Ac250 = "Ac", Aj250 = "Aj", A275 = "A275", A = "A")
-  suffix = switch(var, A250 = "_250", Ac250 = "_c", Aj250 = "_j", A275 = "_275", A = "")
+  # var -> (name prefix, "b"/"Tspan" suffix): known presets keep their
+  # historical naming; any other response name falls back to using var
+  # itself, so new/project-specific response columns are named predictably
+  # without needing an entry here
+  prefix = switch(var,
+    A250 = "A250", Ac250 = "Ac", Aj250 = "Aj", A275 = "A275", A = "A",
+    var
+  )
+  suffix = switch(var,
+    A250 = "_250", Ac250 = "_c", Aj250 = "_j", A275 = "_275", A = "",
+    paste0("_", var)
+  )
 
   names(results)[1:8] <- c(
     paste0(prefix, "opt"), paste0("Topt", prefix), paste0("b", suffix),

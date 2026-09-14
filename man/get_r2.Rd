@@ -4,13 +4,21 @@
 \alias{get_r2}
 \title{R-squared of measured vs. modeled assimilation}
 \usage{
-get_r2(fit_result, engine = c("PhotoGEA", "plantecophys"))
+get_r2(
+  fit_result,
+  engine = c("PhotoGEA", "plantecophys"),
+  identifier_column = "curve_ID"
+)
 }
 \arguments{
 \item{fit_result}{A fit-result object from \code{\link{fit_ACis}}}
 
 \item{engine}{Curve-fitting engine the fit came from: \code{"PhotoGEA"}
 (default) or \code{"plantecophys"}}
+
+\item{identifier_column}{Name of the per-curve identifier column in
+\code{fit_result$fits$main_data} (PhotoGEA engine only; whatever
+\code{group_cols} was originally used for that curve)}
 }
 \value{
 A named numeric vector of R^2 values, one per curve

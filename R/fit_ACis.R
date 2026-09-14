@@ -158,16 +158,20 @@ fit_ACis_PhotoGEA = function(
 #'   \code{\link{fit_ACis_PhotoGEA}}
 #' @param Ci Target intercellular CO2 concentration, ppm
 #' @param val Which interpolated assimilation rate to extract
+#' @param identifier_column Name of the per-curve identifier column in
+#'   \code{fit_result$fits_interpolated$main_data} (whatever \code{group_cols}/
+#'   \code{byname} was originally used for that curve)
 #'
 #' @return A named numeric vector, one value per curve
 #' @noRd
 extract_val_fixedCi = function(
   fit_result,
   Ci = 250,
-  val = c("An", "Ac", "Aj", "Ap")
+  val = c("An", "Ac", "Aj", "Ap"),
+  identifier_column = "curve_ID"
 )
 {
-  fits.l = split(fit_result$fits_interpolated$main_data, fit_result$fits_interpolated$main_data$curve_ID)
+  fits.l = split(fit_result$fits_interpolated$main_data, fit_result$fits_interpolated$main_data[[identifier_column]])
   val_out = sapply(fits.l, function(df) {
     # A curve whose fit failed entirely (e.g. no reliable Vcmax) has Ci ==
     # NA for every interpolated point, so which.min() finds no minimum and
@@ -279,18 +283,22 @@ fit_ACis = function(
 #' @param fit_result A fit-result object from \code{\link{fit_ACis}}
 #' @param engine Curve-fitting engine the fit came from: \code{"PhotoGEA"}
 #'   (default) or \code{"plantecophys"}
+#' @param identifier_column Name of the per-curve identifier column in
+#'   \code{fit_result$fits$main_data} (PhotoGEA engine only; whatever
+#'   \code{group_cols} was originally used for that curve)
 #'
 #' @return A named numeric vector of R^2 values, one per curve
 #' @export
 get_r2 = function(
   fit_result,
-  engine = c("PhotoGEA", "plantecophys")
+  engine = c("PhotoGEA", "plantecophys"),
+  identifier_column = "curve_ID"
 )
 {
   engine = match.arg(engine)
 
   if (engine == "PhotoGEA") {
-    fits.l = split(fit_result$fits$main_data, fit_result$fits$main_data$curve_ID)
+    fits.l = split(fit_result$fits$main_data, fit_result$fits$main_data[[identifier_column]])
     R2 = sapply(fits.l, function(df) {
       lmfit = lm(A ~ A_fit, df)
       summary(lmfit)$r.squared
@@ -317,9 +325,16 @@ get_r2 = function(
 #' @param data The original curve-level data frame to merge fitted
 #'   parameters onto
 #' @param byname Column name(s) to merge \code{fit_result}'s parameters onto
-#'   \code{data} by
+#'   \code{data} by. For the PhotoGEA engine this is also the per-curve
+#'   identifier column used internally for R^2 and fixed-Ci extraction (the
+#'   same column \code{group_cols} named when calling \code{\link{fit_ACis}}),
+#'   not a separate assumption of its own.
 #' @param engine Curve-fitting engine the fit came from: \code{"PhotoGEA"}
 #'   (default) or \code{"plantecophys"}
+#' @param Ci_targets Intercellular CO2 concentrations (ppm) to extract
+#'   A/Ac/Aj/Ap at (PhotoGEA engine only; ignored for \code{"plantecophys"}).
+#'   Defaults to \code{c(250, 275, 360)}, matching this function's original,
+#'   fixed set of extraction points.
 #'
 #' @return \code{data}, with fitted curve parameters merged on
 #' @export
@@ -327,13 +342,14 @@ extract_curve_params = function(
   fit_result,
   data,
   byname,
-  engine = c("PhotoGEA", "plantecophys")
+  engine = c("PhotoGEA", "plantecophys"),
+  Ci_targets = c(250, 275, 360)
 )
 {
   engine = match.arg(engine)
 
   if (engine == "PhotoGEA") {
-    extract_curve_params_photogea(fit_result, data, byname)
+    extract_curve_params_photogea(fit_result, data, byname, Ci_targets = Ci_targets)
   } else {
     extract_curve_params_plantecophys(fit_result, data, byname)
   }
@@ -377,7 +393,7 @@ extract_curve_params_plantecophys = function(fit, data, byname)
 }
 
 #' @noRd
-extract_curve_params_photogea = function(fits_exdf, data, byname)
+extract_curve_params_photogea = function(fits_exdf, data, byname, Ci_targets = c(250, 275, 360))
 {
   ret = fits_exdf$parameters$main_data
 
@@ -392,26 +408,20 @@ extract_curve_params_photogea = function(fits_exdf, data, byname)
   col_match = intersect(colnames(data), colnames(ret))
 
   ret$Jmax_tl[is.infinite(ret$Jmax_tl)] <- NA
-  ret$R2 <- get_r2(fits_exdf, engine = "PhotoGEA")
+  ret$R2 <- get_r2(fits_exdf, engine = "PhotoGEA", identifier_column = byname)
 
-  # extract A at fixed Ci, and average Tleaf
-  ret$Ac250 = extract_val_fixedCi(fits_exdf, Ci = 250, val = "Ac")
-  ret$Aj250 = extract_val_fixedCi(fits_exdf, Ci = 250, val = "Aj")
-  ret$Ap250 = extract_val_fixedCi(fits_exdf, Ci = 250, val = "Ap")
-  ret$Jlim250 <- (ret$Aj250 < ret$Ac250 & ret$Aj250 < ret$Ap250)
-  ret$A250 = extract_val_fixedCi(fits_exdf, Ci = 250, val = "An")
-
-  ret$Ac275 = extract_val_fixedCi(fits_exdf, Ci = 275, val = "Ac")
-  ret$Aj275 = extract_val_fixedCi(fits_exdf, Ci = 275, val = "Aj")
-  ret$Ap275 = extract_val_fixedCi(fits_exdf, Ci = 275, val = "Ap")
-  ret$Jlim275 <- (ret$Aj275 < ret$Ac275 & ret$Aj275 < ret$Ap275)
-  ret$A275 = extract_val_fixedCi(fits_exdf, Ci = 275, val = "An")
-
-  ret$Ac360 = extract_val_fixedCi(fits_exdf, Ci = 360, val = "Ac")
-  ret$Aj360 = extract_val_fixedCi(fits_exdf, Ci = 360, val = "Aj")
-  ret$Ap360 = extract_val_fixedCi(fits_exdf, Ci = 360, val = "Ap")
-  ret$Jlim360 <- (ret$Aj360 < ret$Ac360 & ret$Aj360 < ret$Ap360)
-  ret$A360 = extract_val_fixedCi(fits_exdf, Ci = 360, val = "An")
+  # extract A/Ac/Aj/Ap at each fixed Ci target, and flag Rubisco- vs.
+  # RuBP-regeneration-limitation, for every value in Ci_targets (was three
+  # hardcoded 250/275/360 blocks; generalized so callers needing an
+  # additional extraction point, e.g. 300, don't need a package change)
+  for (ci in Ci_targets) {
+    ret[[paste0("Ac", ci)]] = extract_val_fixedCi(fits_exdf, Ci = ci, val = "Ac", identifier_column = byname)
+    ret[[paste0("Aj", ci)]] = extract_val_fixedCi(fits_exdf, Ci = ci, val = "Aj", identifier_column = byname)
+    ret[[paste0("Ap", ci)]] = extract_val_fixedCi(fits_exdf, Ci = ci, val = "Ap", identifier_column = byname)
+    ret[[paste0("Jlim", ci)]] = (ret[[paste0("Aj", ci)]] < ret[[paste0("Ac", ci)]] &
+                                    ret[[paste0("Aj", ci)]] < ret[[paste0("Ap", ci)]])
+    ret[[paste0("A", ci)]] = extract_val_fixedCi(fits_exdf, Ci = ci, val = "An", identifier_column = byname)
+  }
 
   ret = ret |>
     dplyr::rename(Tleaf = TleafCnd_avg,
