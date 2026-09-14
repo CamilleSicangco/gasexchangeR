@@ -80,8 +80,16 @@ when extending this file):
   dependent C3 parameters and total chamber pressure) → `fit_ACis_PhotGEA()`
   calls `PhotoGEA::fit_c3_aci()` per curve and adds Jmax-related temperature
   response → `extract_curve_params_photogea()` pulls out A at fixed Ci
-  (250/275/360 ppm) via `extract_val_fixedCi()` and merges onto the caller's
-  curve-level data.
+  (`Ci_targets`, default `c(250, 275, 360)` — pass e.g. `c(250, 275, 300, 360)`
+  for an additional extraction point without a package change) via
+  `extract_val_fixedCi()` and merges onto the caller's curve-level data.
+  `get_r2()`'s PhotoGEA branch and the internal `extract_val_fixedCi()` both
+  take an `identifier_column` argument (default `"curve_ID"`, matching this
+  package's own example dataset) naming the per-curve identifier column to
+  split on; `extract_curve_params_photogea()` passes its own `byname` through
+  as this column rather than assuming the two are independently named, so a
+  caller whose curve identifier is spelled differently (e.g. `"curve_id"`)
+  just passes that as `byname` with no renaming needed.
 - plantecophys path: `fit_ACis()` reshapes the input data frame and calls
   `plantecophys::fitacis()` directly (optionally splitting by `Patm_by` to
   use each split's mean atmospheric pressure) →
@@ -138,6 +146,27 @@ required input columns differ (`Rd`/`Tleaf` vs. `var`/`random_effect_col`/
 via `stats::lm()` in place of `nls()` (since its mixed model is `lmer`,
 not `nlme`) — `get_coef_table()` handles `lm`/`lmerMod` fits too, since
 `summary(.)$coefficients` has the same first-two-column shape there as well.
+
+`fitAvT()`'s `var` argument accepts any response-column name, not just its
+five original presets (`A250`/`Ac250`/`Aj250`/`A275`/`A`) — those keep their
+historical output-column naming (e.g. `A250opt`, `ToptA250`, `b_250`), and
+any other name falls back to using `var` itself for naming (e.g.
+`var = "A_forfitting"` produces `A_forfittingopt`, `ToptA_forfitting`,
+`b_A_forfitting`), so a consuming project's own response column doesn't
+require a change here. `fitAvT()` also takes a `Topt_start` argument,
+**defaulting to `"observed_max"`** (start `Topt` at
+`df$Tleaf[which.max(df[[var]])]`) rather than a fixed value — deliberately
+the default, not just an option, since a fit group's temperature range being
+far from any single fixed starting value (e.g. 25) is the common case across
+consuming projects, not an edge case; pass a fixed number instead of
+`"observed_max"` in `Topt_start` to restore the old fixed-start behavior for a
+specific call. Unlike the other three fitters, `fitAvT()`'s `nlme()` call is
+also wrapped in its own `tryCatch()`, falling back to `nls()` on *any* nlme
+error (e.g. a singular random-effect variance for a group with a narrow
+temperature range), not only when `random_effect_col` has a single level —
+the downstream coefficient-extraction branch keys off `inherits(A_Topt,
+"nlme")` rather than the `use_random_effect` flag so this fallback is
+reflected correctly regardless of which fallback path was taken.
 
 `fit_Tresponse_groups()` splits a multi-group data frame by `group_cols`
 and calls one of the four fitters above (or a custom function) once per

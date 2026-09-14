@@ -6,17 +6,23 @@
 \usage{
 fitAvT(
   df,
-  var = c("A250", "Ac250", "Aj250", "A275", "A"),
+  var = "A250",
   incl_random_effect = TRUE,
-  random_effect_col = "curve_ID"
+  random_effect_col = "curve_ID",
+  Topt_start = "observed_max"
 )
 }
 \arguments{
 \item{df}{A data frame with columns \code{Tleaf}, \code{random_effect_col},
 and \code{var}}
 
-\item{var}{Which response variable to fit: \code{"A250"}, \code{"Ac250"},
-\code{"Aj250"}, \code{"A275"}, or the fully dynamic \code{"A"}}
+\item{var}{Name of the response variable to fit. \code{"A250"},
+\code{"Ac250"}, \code{"Aj250"}, \code{"A275"}, and \code{"A"} are
+recognized presets with their own historical output-column naming;
+any other column name is also accepted (output columns are then named
+from \code{var} itself, e.g. \code{paste0(var, "opt")}), so a
+project-specific response column (e.g. \code{"A_forfitting"}) doesn't
+require a package change}
 
 \item{incl_random_effect}{Whether to fit a per-\code{random_effect_col}
 random effect on \code{Aopt} (via \code{nlme}) or a fixed-effects-only
@@ -24,6 +30,13 @@ fit (via \code{nls})}
 
 \item{random_effect_col}{Name of the column identifying groups for the
 per-group random effect (e.g. individual/curve identity)}
+
+\item{Topt_start}{Starting value for \code{Topt}. Either a fixed number,
+or \code{"observed_max"} (the default) to start at
+\code{df$Tleaf[which.max(df[[var]])]} instead -- important when a fit
+group's temperature range is far from a fixed default like 25, which can
+otherwise leave the optimizer starting far from the data and prone to
+non-convergence}
 }
 \value{
 A named numeric vector of fitted parameters, standard errors, and

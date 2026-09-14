@@ -288,3 +288,39 @@ test_that("fitAvT falls back to a fixed-effects fit when random_effect_col has o
 
   expect_equal(unname(fit["A250opt"]), Aopt_true, tolerance = 0.1)
 })
+
+test_that("fitAvT accepts an arbitrary var/response name outside the known presets", {
+  set.seed(27)
+  n_rep = 4
+  Tleaf = rep(seq(15, 40, by = 5), each = n_rep)
+  curve_ID = rep(paste0("R", seq_len(n_rep)), times = length(unique(Tleaf)))
+  Aopt_true = 20
+  Topt_true = 28
+  b_true = 0.03
+  A_custom = Aopt_true - b_true * (Tleaf - Topt_true)^2 + rnorm(length(Tleaf), 0, 0.3)
+  df = data.frame(Tleaf = Tleaf, curve_ID = curve_ID, A_custom = A_custom)
+
+  fit = fitAvT(df, var = "A_custom", incl_random_effect = TRUE)
+
+  expect_true(all(c("A_customopt", "ToptA_custom", "b_A_custom", "Tspan_A_custom") %in% names(fit)))
+  expect_equal(unname(fit["A_customopt"]), Aopt_true, tolerance = 0.1)
+  expect_equal(unname(fit["ToptA_custom"]), Topt_true, tolerance = 0.2)
+})
+
+test_that("fitAvT's Topt_start defaults to the observed max and accepts a fixed override", {
+  set.seed(28)
+  n_rep = 4
+  Tleaf = rep(seq(15, 40, by = 5), each = n_rep)
+  curve_ID = rep(paste0("R", seq_len(n_rep)), times = length(unique(Tleaf)))
+  Aopt_true = 20
+  Topt_true = 32
+  b_true = 0.02
+  A250 = Aopt_true - b_true * (Tleaf - Topt_true)^2 + rnorm(length(Tleaf), 0, 0.3)
+  df = data.frame(Tleaf = Tleaf, curve_ID = curve_ID, A250 = A250)
+
+  fit_default = fitAvT(df, var = "A250", incl_random_effect = TRUE)
+  expect_equal(unname(fit_default["ToptA250"]), Topt_true, tolerance = 0.15)
+
+  fit_fixed_start = fitAvT(df, var = "A250", incl_random_effect = TRUE, Topt_start = 25)
+  expect_equal(unname(fit_fixed_start["ToptA250"]), Topt_true, tolerance = 0.15)
+})

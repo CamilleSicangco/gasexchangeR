@@ -124,3 +124,123 @@ test_that("extract_curve_params extracts fixed-Ci values and merges data (PhotoG
   expect_equal(ret$A250, c(18, 14))
   expect_equal(ret$species, c("Sp1", "Sp2"))
 })
+
+test_that("get_r2 accepts a custom identifier_column name (PhotoGEA engine)", {
+  fits_main = data.frame(
+    curve_id = c("C1", "C1", "C1", "C2", "C2", "C2"),
+    A = c(10, 15, 18, 8, 12, 14),
+    A_fit = c(10.2, 14.8, 18.1, 7.9, 12.3, 13.8)
+  )
+  fit_result = list(fits = list(main_data = fits_main))
+
+  r2 = get_r2(fit_result, engine = "PhotoGEA", identifier_column = "curve_id")
+
+  expect_equal(names(r2), c("C1", "C2"))
+  expect_true(all(r2 > 0.95))
+})
+
+test_that("extract_curve_params accepts Ci_targets and a differently-named identifier column (PhotoGEA engine)", {
+  # Same shape as the "extracts fixed-Ci values and merges data" test above,
+  # but with the identifier column named "curve_id" (lowercase, matching a
+  # real consumer's own naming) instead of the default "curve_ID", and an
+  # extra Ci_targets entry (300) beyond the historical 250/275/360.
+  params_main = data.frame(
+    curve_id = c("C1", "C2"),
+    TleafCnd_avg = c(25, 26),
+    Vcmax_tl_avg = c(80, 60),
+    Jmax_tl = c(150, 120),
+    RL_tl_avg = c(1.2, 1.0),
+    Tp_tl_avg = c(10, 8),
+    Gamma_star_tl_avg = c(40, 41)
+  )
+
+  fits_main = data.frame(
+    curve_id = c("C1", "C1", "C1", "C2", "C2", "C2"),
+    A = c(10, 15, 18, 8, 12, 14),
+    A_fit = c(10.2, 14.8, 18.1, 7.9, 12.3, 13.8)
+  )
+
+  interp = data.frame(
+    curve_id = rep(c("C1", "C2"), each = 6),
+    Ci = rep(c(100, 250, 275, 300, 360, 500), times = 2),
+    An = c(10, 18, 19, 19.5, 20, 15, 8, 14, 15, 15.5, 16, 12),
+    Ac = c(9, 17, 18, 18.5, 19, 14, 7, 13, 14, 14.5, 15, 11),
+    Aj = c(11, 19, 20, 20.5, 21, 16, 9, 15, 16, 16.5, 17, 13),
+    Ap = c(12, 20, 21, 21.5, 22, 17, 10, 16, 17, 17.5, 18, 14)
+  )
+
+  fits_exdf = list(
+    parameters = list(main_data = params_main),
+    fits = list(main_data = fits_main),
+    fits_interpolated = list(main_data = interp)
+  )
+
+  data = data.frame(
+    curve_id = c("C1", "C2"),
+    species = c("Sp1", "Sp2"),
+    E = c(0.002, 0.003),
+    Tirga = c(30, 31)
+  )
+
+  ret = extract_curve_params(fits_exdf, data, byname = "curve_id", engine = "PhotoGEA",
+                             Ci_targets = c(250, 275, 300, 360))
+
+  expect_equal(nrow(ret), 2)
+  expect_true(all(c("A250", "A275", "A300", "A360") %in% names(ret)))
+
+  ret = ret[match(c("C1", "C2"), ret$curve_id), ]
+  expect_equal(ret$A300, c(19.5, 15.5))
+})
+
+test_that("extract_curve_params accepts average_cols naming a different per-point column range (PhotoGEA engine)", {
+  params_main = data.frame(
+    curve_ID = c("C1", "C2"),
+    TleafCnd_avg = c(25, 26),
+    Vcmax_tl_avg = c(80, 60),
+    Jmax_tl = c(150, 120),
+    RL_tl_avg = c(1.2, 1.0),
+    Tp_tl_avg = c(10, 8),
+    Gamma_star_tl_avg = c(40, 41)
+  )
+
+  fits_main = data.frame(
+    curve_ID = c("C1", "C1", "C1", "C2", "C2", "C2"),
+    A = c(10, 15, 18, 8, 12, 14),
+    A_fit = c(10.2, 14.8, 18.1, 7.9, 12.3, 13.8)
+  )
+
+  interp = data.frame(
+    curve_ID = rep(c("C1", "C2"), each = 5),
+    Ci = rep(c(100, 250, 275, 360, 500), times = 2),
+    An = c(10, 18, 19, 20, 15, 8, 14, 15, 16, 12),
+    Ac = c(9, 17, 18, 19, 14, 7, 13, 14, 15, 11),
+    Aj = c(11, 19, 20, 21, 16, 9, 15, 16, 17, 13),
+    Ap = c(12, 20, 21, 22, 17, 10, 16, 17, 18, 14)
+  )
+
+  fits_exdf = list(
+    parameters = list(main_data = params_main),
+    fits = list(main_data = fits_main),
+    fits_interpolated = list(main_data = interp)
+  )
+
+  # Per-point rows for C1/C2 with a "gsw"..."Pa" column range instead of the
+  # package default "E"..."Tirga", mirroring a caller with its own layout.
+  # species sits outside the range (before it) to confirm out-of-range
+  # columns are still just take-first, not averaged.
+  data = data.frame(
+    curve_ID = rep(c("C1", "C2"), each = 3),
+    species = rep(c("Sp1", "Sp2"), each = 3),
+    gsw = c(0.30, 0.32, 0.28, 0.20, 0.22, 0.18),
+    Pa = c(100, 101, 99, 100, 100, 100)
+  )
+
+  ret = extract_curve_params(fits_exdf, data, byname = "curve_ID", engine = "PhotoGEA",
+                             average_cols = c("gsw", "Pa"))
+
+  expect_equal(nrow(ret), 2)
+  ret = ret[match(c("C1", "C2"), ret$curve_ID), ]
+  expect_equal(ret$gsw, c(mean(c(0.30, 0.32, 0.28)), mean(c(0.20, 0.22, 0.18))))
+  expect_equal(ret$Pa, c(mean(c(100, 101, 99)), 100))
+  expect_equal(ret$species, c("Sp1", "Sp2"))
+})

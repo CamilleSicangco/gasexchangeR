@@ -8,7 +8,9 @@ extract_curve_params(
   fit_result,
   data,
   byname,
-  engine = c("PhotoGEA", "plantecophys")
+  engine = c("PhotoGEA", "plantecophys"),
+  Ci_targets = c(250, 275, 360),
+  average_cols = c("E", "Tirga")
 )
 }
 \arguments{
@@ -18,10 +20,27 @@ extract_curve_params(
 parameters onto}
 
 \item{byname}{Column name(s) to merge \code{fit_result}'s parameters onto
-\code{data} by}
+\code{data} by. For the PhotoGEA engine this is also the per-curve
+identifier column used internally for R^2 and fixed-Ci extraction (the
+same column \code{group_cols} named when calling \code{\link{fit_ACis}}),
+not a separate assumption of its own.}
 
 \item{engine}{Curve-fitting engine the fit came from: \code{"PhotoGEA"}
 (default) or \code{"plantecophys"}}
+
+\item{Ci_targets}{Intercellular CO2 concentrations (ppm) to extract
+A/Ac/Aj/Ap at (PhotoGEA engine only; ignored for \code{"plantecophys"}).
+Defaults to \code{c(250, 275, 360)}, matching this function's original,
+fixed set of extraction points.}
+
+\item{average_cols}{Length-2 character vector naming the two ends of a
+positional range of columns in the merged data (PhotoGEA engine only;
+ignored for \code{"plantecophys"}) to average across a curve's points
+when collapsing to one row per curve, rather than just keep the first
+value like every other merged column -- e.g. raw per-point gas-exchange
+readings that vary within a curve. Defaults to \code{c("E", "Tirga")};
+pass the two columns bounding the equivalent range in your own data if
+they're named differently (e.g. \code{c("gsw", "Pa")}).}
 }
 \value{
 \code{data}, with fitted curve parameters merged on
