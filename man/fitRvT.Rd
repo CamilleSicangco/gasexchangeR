@@ -26,7 +26,7 @@ Adapted from Heskel et al. 2016. Fits \code{log(var) ~ Tleaf + Tleaf^2}
 with a per-\code{random_effect_col} random effect on the intercept via
 \code{\link[lme4]{lmer}}, then back-transforms to \code{Rdark} at 25 deg
 C. Distinct from \code{\link{fitRvT_Ea}} (a Drake et al. 2015 Arrhenius
-\code{nls} fit with no random effect) — the two use different models and
+\code{\link[minpack.lm]{nlsLM}} fit with no random effect) — the two use different models and
 different required columns. Like \code{\link{fit_temperature_response}},
 \code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, if
 \code{random_effect_col} only has one level in \code{df}, fits without a

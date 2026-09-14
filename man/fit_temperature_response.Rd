@@ -37,7 +37,8 @@ Fits a peaked Arrhenius model (with an entropy term) and a standard
 Arrhenius model to \code{Vcmax} or \code{Jmax} vs. leaf temperature, with
 a per-\code{random_effect_col} random effect, and compares the two via
 AIC/anova. If \code{random_effect_col} only has one level in \code{dat},
-fits without a random effect (via \code{nls}) instead of erroring.
+fits without a random effect (via \code{\link[minpack.lm]{nlsLM}})
+instead of erroring.
 Replaces the previously separate \code{fitpeaked()} (Vcmax) and
 \code{fitpeakedJ()} (Jmax) functions.
 }

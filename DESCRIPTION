@@ -16,6 +16,7 @@ Imports:
     stringr,
     nlme,
     lme4,
+    minpack.lm,
     plantecophys,
     PhotoGEA,
     lattice,

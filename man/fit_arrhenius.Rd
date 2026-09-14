@@ -31,6 +31,7 @@ random effect — simpler than
 \code{\link{fit_temperature_response}}\code{(return = "Arr")}, which also
 fits the peaked model for comparison. If \code{random_effect_col} only
 has one level in \code{dat}, fits without a random effect (via
-\code{nls}) instead of erroring. Replaces the previously separate
-\code{fitarh()} (Vcmax) and \code{fitarhJ()} (Jmax) functions.
+\code{\link[minpack.lm]{nlsLM}}) instead of erroring. Replaces the
+previously separate \code{fitarh()} (Vcmax) and \code{fitarhJ()} (Jmax)
+functions.
 }

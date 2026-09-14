@@ -58,8 +58,8 @@ quadratic_topt_formula = function(response)
 # grouped by a column whose name is caller-specified (random_effect_col)
 # rather than hardcoded. Neither nlme nor lmer can estimate a random effect
 # from a single group, so these helpers let each function fall back to an
-# equivalent fixed-effects-only fit (nls() for the nlme-based three, lm() for
-# fitRvT()) rather than erroring when random_effect_col only has one level --
+# equivalent fixed-effects-only fit (nlsLM() for the nlme-based three, lm()
+# for fitRvT()) rather than erroring when random_effect_col only has one level --
 # which lets fit_Tresponse_groups() fit every group regardless of how many
 # curves it has to pool.
 
@@ -87,9 +87,9 @@ warn_no_random_effect = function(group_col)
   )
 }
 
-#' Fixed-effect coefficient table from an nlme, nls, lm, or lmer fit
+#' Fixed-effect coefficient table from an nlme, nlsLM, lm, or lmer fit
 #'
-#' \code{summary(nlme_fit)$tTable} and \code{summary(.)$coefficients} (nls,
+#' \code{summary(nlme_fit)$tTable} and \code{summary(.)$coefficients} (nlsLM,
 #' lm, and lmerMod fits all have this) are all parameter-by-statistic
 #' matrices with \code{Value}/\code{Estimate} as column 1 and
 #' \code{Std.Error} as column 2 (nlme has extra columns after that; the
@@ -101,9 +101,10 @@ get_coef_table = function(fit)
   if (inherits(fit, "nlme")) summary(fit)$tTable else summary(fit)$coefficients
 }
 
-#' p-value from anova() on a pair of nlme or nls fits
+#' p-value from anova() on a pair of nlme or nlsLM fits
 #'
-#' nlme::anova.lme() and stats::anova.nls() name their p-value column
+#' nlme::anova.lme() and stats::anova.nls() (nlsLM fits dispatch to the same
+#' anova.nls() method) name their p-value column
 #' differently ("p-value" vs. "Pr(>F)"), so look it up by name rather than
 #' position.
 #' @noRd
@@ -121,7 +122,8 @@ get_anova_pvalue = function(an)
 #' Arrhenius model to \code{Vcmax} or \code{Jmax} vs. leaf temperature, with
 #' a per-\code{random_effect_col} random effect, and compares the two via
 #' AIC/anova. If \code{random_effect_col} only has one level in \code{dat},
-#' fits without a random effect (via \code{nls}) instead of erroring.
+#' fits without a random effect (via \code{\link[minpack.lm]{nlsLM}})
+#' instead of erroring.
 #' Replaces the previously separate \code{fitpeaked()} (Vcmax) and
 #' \code{fitpeakedJ()} (Jmax) functions.
 #'
@@ -164,7 +166,7 @@ fit_temperature_response = function(
          data = dat,
          start = start)
   } else {
-    nls(arrhenius_formula(response, "delS_peaked"), data = dat, start = start)
+    nlsLM(arrhenius_formula(response, "delS_peaked"), data = dat, start = start)
   }
 
   res1 <- data.frame(t(get_coef_table(Vc)[1:6]))
@@ -181,7 +183,7 @@ fit_temperature_response = function(
          data = dat,
          start = c(k25 = 100, Ea = 40))
   } else {
-    nls(arrhenius_formula(response, "standard"), data = dat, start = c(k25 = 100, Ea = 40))
+    nlsLM(arrhenius_formula(response, "standard"), data = dat, start = c(k25 = 100, Ea = 40))
   }
 
   res <- data.frame(t(get_coef_table(Vr)[1:4]))
@@ -212,7 +214,7 @@ fit_temperature_response = function(
          data = dat,
          start = c(Ropt = 150, Ea = 60, Topt = 310))
   } else {
-    nls(arrhenius_formula(response, "topt_peaked"), data = dat,
+    nlsLM(arrhenius_formula(response, "topt_peaked"), data = dat,
         start = c(Ropt = 150, Ea = 60, Topt = 310))
   }
 
@@ -249,8 +251,9 @@ fit_temperature_response = function(
 #' \code{\link{fit_temperature_response}}\code{(return = "Arr")}, which also
 #' fits the peaked model for comparison. If \code{random_effect_col} only
 #' has one level in \code{dat}, fits without a random effect (via
-#' \code{nls}) instead of erroring. Replaces the previously separate
-#' \code{fitarh()} (Vcmax) and \code{fitarhJ()} (Jmax) functions.
+#' \code{\link[minpack.lm]{nlsLM}}) instead of erroring. Replaces the
+#' previously separate \code{fitarh()} (Vcmax) and \code{fitarhJ()} (Jmax)
+#' functions.
 #'
 #' @param dat A data frame with columns \code{TsK} (leaf temperature, K),
 #'   \code{random_effect_col}, and \code{response}
@@ -283,7 +286,7 @@ fit_arrhenius = function(
          data = dat,
          start = c(k25 = 100, Ea = 40))
   } else {
-    nls(arrhenius_formula(response, "standard"), data = dat, start = c(k25 = 100, Ea = 40))
+    nlsLM(arrhenius_formula(response, "standard"), data = dat, start = c(k25 = 100, Ea = 40))
   }
 
   res <- get_coef_table(Vr)[1:4]
@@ -324,7 +327,7 @@ fit_arrhenius = function(
 #'   require a package change
 #' @param incl_random_effect Whether to fit a per-\code{random_effect_col}
 #'   random effect on \code{Aopt} (via \code{nlme}) or a fixed-effects-only
-#'   fit (via \code{nls})
+#'   fit (via \code{\link[minpack.lm]{nlsLM}})
 #' @param random_effect_col Name of the column identifying groups for the
 #'   per-group random effect (e.g. individual/curve identity)
 #' @param Topt_start Starting value for \code{Topt}. Either a fixed number,
@@ -360,11 +363,11 @@ fitAvT = function(
   if (isTRUE(incl_random_effect) && !use_random_effect) warn_no_random_effect(random_effect_col)
 
   if (!use_random_effect) {
-    A_Topt <- nls(formula_v, data = df, start = as.list(start_vals))
+    A_Topt <- nlsLM(formula_v, data = df, start = as.list(start_vals))
   } else {
     # nlme's random-effect variance component can be singular for groups with
     # a narrow temperature range or few random-effect levels, which makes
-    # nlme error out instead of returning a fit -- fall back to a plain nls
+    # nlme error out instead of returning a fit -- fall back to a plain nlsLM
     # fit (no random effect) so the group isn't dropped entirely, rather than
     # only falling back when random_effect_col itself has a single level.
     A_Topt <- tryCatch(
@@ -376,7 +379,7 @@ fitAvT = function(
       error = function(e) NULL
     )
     if (is.null(A_Topt)) {
-      A_Topt <- nls(formula_v, data = df, start = as.list(start_vals))
+      A_Topt <- nlsLM(formula_v, data = df, start = as.list(start_vals))
     }
   }
 
@@ -433,7 +436,7 @@ fitAvT = function(
 fitRvT_Ea <- function(dataresp)
 {
   Rgas <- 8.314 # J per mol per K
-  rday <- try(nls(Rd ~ R_Tref * exp((Ea * 1000 / (Rgas * 298.15)) * (1 - 298.15 / (Tleaf + 273.15))),
+  rday <- try(nlsLM(Rd ~ R_Tref * exp((Ea * 1000 / (Rgas * 298.15)) * (1 - 298.15 / (Tleaf + 273.15))),
                   start = list(R_Tref = 2, Ea = 20), data = dataresp), silent = TRUE)
 
   Rday_25 <- try(summary(rday)$coefficients[[1]], silent = TRUE)
@@ -461,7 +464,7 @@ fitRvT_Ea <- function(dataresp)
 #' with a per-\code{random_effect_col} random effect on the intercept via
 #' \code{\link[lme4]{lmer}}, then back-transforms to \code{Rdark} at 25 deg
 #' C. Distinct from \code{\link{fitRvT_Ea}} (a Drake et al. 2015 Arrhenius
-#' \code{nls} fit with no random effect) — the two use different models and
+#' \code{\link[minpack.lm]{nlsLM}} fit with no random effect) — the two use different models and
 #' different required columns. Like \code{\link{fit_temperature_response}},
 #' \code{\link{fit_arrhenius}}, and \code{\link{fitAvT}}, if
 #' \code{random_effect_col} only has one level in \code{df}, fits without a

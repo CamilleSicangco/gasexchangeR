@@ -4,7 +4,8 @@
 #' @importFrom plantecophys fitacis
 #' @importFrom nlme nlme
 #' @importFrom lme4 lmer
-#' @importFrom stats anova AIC shapiro.test residuals fitted coef lm nls cor as.formula reformulate
+#' @importFrom minpack.lm nlsLM
+#' @importFrom stats anova AIC shapiro.test residuals fitted coef lm cor as.formula reformulate
 #' @importFrom utils globalVariables
 #' @importFrom PhotoGEA check_response_curve_data organize_response_curve_data calculate_temperature_response calculate_total_pressure consolidate fit_c3_aci calculate_jmax is.exdf check_required_variables multi_curve_colors
 

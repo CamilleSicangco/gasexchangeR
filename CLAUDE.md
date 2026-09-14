@@ -125,25 +125,31 @@ writing a new formula object by hand.
 caller-specified `random_effect_col` (default `"curve_ID"`) rather than a
 hardcoded column name. `nlme` can't estimate a random effect from a single
 group, so all three fall back to an equivalent fixed-effects-only
-`stats::nls()` fit (emitting a `message()`) whenever `random_effect_col`
+`minpack.lm::nlsLM()` fit (emitting a `message()`) whenever `random_effect_col`
 has fewer than 2 distinct levels in the input data, instead of erroring —
-`fitAvT()`'s `incl_random_effect = FALSE` still forces the `nls` path
-regardless of level count. The shared helpers behind this
+`fitAvT()`'s `incl_random_effect = FALSE` still forces the `nlsLM` path
+regardless of level count. `nlsLM()` is used in place of base `stats::nls()`
+throughout this file for its more robust Levenberg-Marquardt optimizer (fewer
+"singular gradient"-type non-convergence failures); it returns the same `nls`
+S3 class, so all the downstream `summary()`/`anova()`/`coef()` handling below
+is unaffected — don't reintroduce `stats::nls()` in this file without the same
+justification for departing from `nlsLM()`. The shared helpers behind this
 (`has_multiple_levels()`, `random_intercept_formula()`, `get_coef_table()`,
 `get_anova_pvalue()`, all `@noRd` near the top of `fit_Tresponses.R`) exist
-because `nlme`'s `summary()$tTable` and `nls`'s `summary()$coefficients`
+because `nlme`'s `summary()$tTable` and `nlsLM`'s `summary()$coefficients`
 put `Value`/`Estimate` and `Std.Error` in the same first two columns, and
-`nlme::anova.lme()`/`stats::anova.nls()` name their p-value column
+`nlme::anova.lme()`/`stats::anova.nls()` (which `nlsLM` fits also dispatch to)
+name their p-value column
 differently — extend these helpers rather than re-deriving the
 engine-dispatch logic per function. `fitRvT_Ea()` (Drake et al. 2015,
-Arrhenius `nls`) and `fitRvT()` (Heskel et al. 2016, quadratic-in-log
+Arrhenius `nlsLM`) and `fitRvT()` (Heskel et al. 2016, quadratic-in-log
 `lme4::lmer()`, with a `var` parameter for which respiration-rate column
 to fit) are two genuinely different respiration-vs-temperature models,
 kept as separate functions rather than unified — don't merge them, their
 required input columns differ (`Rd`/`Tleaf` vs. `var`/`random_effect_col`/
 `Tleaf`). `fitRvT()` has the same `random_effect_col`
 (default `"curve_ID"`) and single-level fallback as the other three, just
-via `stats::lm()` in place of `nls()` (since its mixed model is `lmer`,
+via `stats::lm()` in place of `nlsLM()` (since its mixed model is `lmer`,
 not `nlme`) — `get_coef_table()` handles `lm`/`lmerMod` fits too, since
 `summary(.)$coefficients` has the same first-two-column shape there as well.
 
@@ -161,7 +167,7 @@ far from any single fixed starting value (e.g. 25) is the common case across
 consuming projects, not an edge case; pass a fixed number instead of
 `"observed_max"` in `Topt_start` to restore the old fixed-start behavior for a
 specific call. Unlike the other three fitters, `fitAvT()`'s `nlme()` call is
-also wrapped in its own `tryCatch()`, falling back to `nls()` on *any* nlme
+also wrapped in its own `tryCatch()`, falling back to `nlsLM()` on *any* nlme
 error (e.g. a singular random-effect variance for a group with a narrow
 temperature range), not only when `random_effect_col` has a single level —
 the downstream coefficient-extraction branch keys off `inherits(A_Topt,

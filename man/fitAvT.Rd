@@ -26,7 +26,7 @@ require a package change}
 
 \item{incl_random_effect}{Whether to fit a per-\code{random_effect_col}
 random effect on \code{Aopt} (via \code{nlme}) or a fixed-effects-only
-fit (via \code{nls})}
+fit (via \code{\link[minpack.lm]{nlsLM}})}
 
 \item{random_effect_col}{Name of the column identifying groups for the
 per-group random effect (e.g. individual/curve identity)}
