@@ -545,14 +545,19 @@ plot_c3_aci_fit_indiv = function(
   # number, so indexing main_data's columns directly with it (as this used
   # to) did name-based indexing into an unnamed vector and always resolved
   # to NA/blank. Filtering the exdf first and taking row 1 matches how
-  # curve_interpolated/curve_data are already selected below.
+  # curve_interpolated/curve_data are already selected below. Note this
+  # `[.exdf` call (a row filter with no column arg, and `return_exdf` left
+  # at its FALSE default) returns a plain data frame, not an exdf -- so
+  # `curve_parameters` is indexed directly below (`curve_parameters$col`),
+  # the same way the existing `curve_parameters[1, 'operating_An_model']`
+  # call further down already does, not via a `$main_data` sub-element.
   curve_parameters <-
     fit_results$parameters[fit_results$parameters[, identifier_column_name] == identifier_column_val, ]
 
-  title = paste0(curve_parameters$main_data$curve_ID[1], ": ",
-                curve_parameters$main_data$location[1], ", ",
-                curve_parameters$main_data$sample[1], ", Tleaf = ",
-                round(curve_parameters$main_data$TleafCnd_avg[1], digits = 1))
+  title = paste0(curve_parameters$curve_ID[1], ": ",
+                curve_parameters$location[1], ", ",
+                curve_parameters$sample[1], ", Tleaf = ",
+                round(curve_parameters$TleafCnd_avg[1], digits = 1))
 
   curve_interpolated <-
     subset(fit_results$fits_interpolated$main_data, curve_ID == identifier_column_val)
