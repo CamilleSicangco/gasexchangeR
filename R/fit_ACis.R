@@ -521,13 +521,18 @@ extract_curve_params_photogea = function(fits_exdf, data, byname, Ci_targets = c
 #'   \code{\link{fit_ACis}}
 #' @param identifier_column_name Name of the curve identifier column
 #' @param identifier_column_val Curve identifier value to plot
+#' @param label_location Whether to include \code{location} in the plot
+#'   title. Defaults to \code{TRUE}; set to \code{FALSE} for studies (e.g. a
+#'   single-location field study) where every curve shares the same
+#'   location and it isn't useful to repeat per-plot.
 #'
 #' @return A \pkg{lattice} plot object
 #' @export
 plot_c3_aci_fit_indiv = function(
   fit_results,
   identifier_column_name,
-  identifier_column_val
+  identifier_column_val,
+  label_location = TRUE
 )
 {
   # Choose line settings
@@ -555,7 +560,7 @@ plot_c3_aci_fit_indiv = function(
     fit_results$parameters[fit_results$parameters[, identifier_column_name] == identifier_column_val, ]
 
   title = paste0(curve_parameters$curve_ID[1], ": ",
-                curve_parameters$location[1], ", ",
+                if (label_location) paste0(curve_parameters$location[1], ", ") else "",
                 curve_parameters$sample[1], ", Tleaf = ",
                 round(curve_parameters$TleafCnd_avg[1], digits = 1))
 
