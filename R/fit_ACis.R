@@ -102,11 +102,13 @@ fit_ACis_PhotoGEA = function(
   # single bad curve can't take down the fit for every other curve in the
   # dataset -- by() itself has no such isolation; an uncaught error in any
   # one group aborts the whole call. A failing curve is warned about by
-  # name and then dropped entirely (not NA-filled): consolidate() requires
-  # every element to share the same list structure, and there's no
+  # name and then dropped from the fit itself (not NA-filled): consolidate()
+  # requires every element to share the same list structure, and there's no
   # meaningful partial fit_c3_aci() result to fabricate for a curve whose
-  # fit crashed outright. Curves absent from the final result should be
-  # checked for by missing curve_ID, not by NA values.
+  # fit crashed outright. Its identifier is recorded in the "failed_curves"
+  # attribute below instead, so callers who want a row per input curve can
+  # still recover it via extract_curve_params(..., keep_failed = TRUE).
+  failed_curves <- c()
   by_result <- by(
     licor_exdf,                       # The `exdf` object containing the curves
     licor_exdf[, identifier_columns], # A factor used to split `gasex_data` into chunks
@@ -120,6 +122,7 @@ fit_ACis_PhotoGEA = function(
             ": ", conditionMessage(e), " -- excluded from the fit results.",
             call. = FALSE
           )
+          failed_curves <<- c(failed_curves, curve_id)
           NULL
         }
       )
@@ -130,6 +133,11 @@ fit_ACis_PhotoGEA = function(
 
   # Fit the A-Ci curves
   ACi_fits <- consolidate(by_result)
+
+  # Recorded as an attribute (not a 4th list element) so this stays
+  # transparent to plot_c3_aci_fit_indiv0()'s `length(fit_results) != 3`
+  # structural check and to consolidate()-shaped consumers generally.
+  attr(ACi_fits, "failed_curves") <- failed_curves
 
   # Calculate temperature-dependent values of Jmax-related parameters
   # (a lazy-loaded PhotoGEA dataset, so it can't be @importFrom'd)
@@ -343,6 +351,12 @@ get_r2 = function(
 #'   readings that vary within a curve. Defaults to \code{c("E", "Tirga")};
 #'   pass the two columns bounding the equivalent range in your own data if
 #'   they're named differently (e.g. \code{c("gsw", "Pa")}).
+#' @param keep_failed Whether to keep curves \code{fit_ACis()} failed to fit
+#'   (PhotoGEA engine only; ignored for \code{"plantecophys"}) as extra rows
+#'   with all fitted-parameter columns \code{NA} and \code{fit_failed = TRUE}
+#'   (successfully-fit rows get \code{fit_failed = FALSE}), instead of the
+#'   default of omitting them entirely. Curve-level columns from \code{data}
+#'   itself (e.g. \code{sp_code}) are still populated on these rows.
 #'
 #' @return \code{data}, with fitted curve parameters merged on
 #' @export
@@ -352,13 +366,15 @@ extract_curve_params = function(
   byname,
   engine = c("PhotoGEA", "plantecophys"),
   Ci_targets = c(250, 275, 360),
-  average_cols = c("E", "Tirga")
+  average_cols = c("E", "Tirga"),
+  keep_failed = FALSE
 )
 {
   engine = match.arg(engine)
 
   if (engine == "PhotoGEA") {
-    extract_curve_params_photogea(fit_result, data, byname, Ci_targets = Ci_targets, average_cols = average_cols)
+    extract_curve_params_photogea(fit_result, data, byname, Ci_targets = Ci_targets,
+                                   average_cols = average_cols, keep_failed = keep_failed)
   } else {
     extract_curve_params_plantecophys(fit_result, data, byname)
   }
@@ -403,7 +419,7 @@ extract_curve_params_plantecophys = function(fit, data, byname)
 
 #' @noRd
 extract_curve_params_photogea = function(fits_exdf, data, byname, Ci_targets = c(250, 275, 360),
-                                          average_cols = c("E", "Tirga"))
+                                          average_cols = c("E", "Tirga"), keep_failed = FALSE)
 {
   ret = fits_exdf$parameters$main_data
 
@@ -471,6 +487,26 @@ extract_curve_params_photogea = function(fits_exdf, data, byname, Ci_targets = c
     summarise(across(!dplyr::all_of(range_cols), first),
               across(dplyr::all_of(range_cols), mean),
               .groups = "drop")
+
+  # Re-attach curves fit_ACis() couldn't fit as extra rows, if asked to. Their
+  # fitted-parameter columns (Vcmax, R2, A250, ...) are absent from `data`, so
+  # bind_rows() naturally leaves them NA -- only the curve-level columns
+  # already present in `data` itself (e.g. sp_code) get filled in.
+  if (keep_failed) {
+    failed = attr(fits_exdf, "failed_curves")
+
+    ret$fit_failed = FALSE
+
+    if (length(failed) > 0) {
+      failed_rows = data[data[[byname]] %in% failed, ] |>
+        group_by(!!sym(byname)) |>
+        summarise(across(everything(), first), .groups = "drop") |>
+        mutate(fit_failed = TRUE)
+
+      ret = dplyr::bind_rows(ret, failed_rows)
+    }
+  }
+
   return(ret)
 }
 
@@ -504,10 +540,19 @@ plot_c3_aci_fit_indiv = function(
     lty = c(1, 5, 5, 5, 2)
   )
 
-  title = paste0(fit_results$parameters$main_data$curve_ID[identifier_column_val], ": ",
-                fit_results$parameters$main_data$location[identifier_column_val], ", ",
-                fit_results$parameters$main_data$sample[identifier_column_val], ", Tleaf = ",
-                round(fit_results$parameters$main_data$TleafCnd_avg[identifier_column_val], digits = 1))
+  # Look this curve's row up by value, not position -- identifier_column_val
+  # is the curve's identifier *value* (e.g. a curve_ID string), not a row
+  # number, so indexing main_data's columns directly with it (as this used
+  # to) did name-based indexing into an unnamed vector and always resolved
+  # to NA/blank. Filtering the exdf first and taking row 1 matches how
+  # curve_interpolated/curve_data are already selected below.
+  curve_parameters <-
+    fit_results$parameters[fit_results$parameters[, identifier_column_name] == identifier_column_val, ]
+
+  title = paste0(curve_parameters$main_data$curve_ID[1], ": ",
+                curve_parameters$main_data$location[1], ", ",
+                curve_parameters$main_data$sample[1], ", Tleaf = ",
+                round(curve_parameters$main_data$TleafCnd_avg[1], digits = 1))
 
   curve_interpolated <-
     subset(fit_results$fits_interpolated$main_data, curve_ID == identifier_column_val)
@@ -529,9 +574,6 @@ plot_c3_aci_fit_indiv = function(
                   main = title,
                   ylim = c(ymin, ymax),
                   panel = function(...) {
-                    curve_parameters <-
-                      fit_results$parameters[fit_results$parameters[, identifier_column_name] == identifier_column_val, ]
-
                     curve_data <-
                       fit_results$fits[fit_results$fits[, identifier_column_name] == identifier_column_val, ]
 
