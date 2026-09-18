@@ -559,10 +559,24 @@ plot_c3_aci_fit_indiv = function(
   curve_parameters <-
     fit_results$parameters[fit_results$parameters[, identifier_column_name] == identifier_column_val, ]
 
-  title = paste0(curve_parameters$curve_ID[1], ": ",
-                if (label_location) paste0(curve_parameters$location[1], ", ") else "",
-                curve_parameters$sample[1], ", Tleaf = ",
-                round(curve_parameters$TleafCnd_avg[1], digits = 1))
+  # Only include location/sample when they're actually present and
+  # non-missing -- e.g. a single-location study's data may have no
+  # `sample` column at all, in which case curve_parameters$sample is NULL
+  # and paste0() silently drops it, leaving a stray "curve_ID: , Tleaf = "
+  # behind if the ": " separator were always added unconditionally.
+  label_parts = character(0)
+  if (label_location && !is.null(curve_parameters$location) && !is.na(curve_parameters$location[1])) {
+    label_parts = c(label_parts, curve_parameters$location[1])
+  }
+  if (!is.null(curve_parameters$sample) && !is.na(curve_parameters$sample[1])) {
+    label_parts = c(label_parts, curve_parameters$sample[1])
+  }
+
+  title = paste0(
+    curve_parameters$curve_ID[1],
+    if (length(label_parts) > 0) paste0(": ", paste(label_parts, collapse = ", ")) else "",
+    ", Tleaf = ", round(curve_parameters$TleafCnd_avg[1], digits = 1)
+  )
 
   curve_interpolated <-
     subset(fit_results$fits_interpolated$main_data, curve_ID == identifier_column_val)
