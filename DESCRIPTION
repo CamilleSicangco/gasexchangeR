@@ -1,7 +1,7 @@
 Package: gasexchangeR
 Type: Package
 Title: Processing and Fitting of Leaf Gas Exchange Curves
-Version: 0.2.0
+Version: 0.3.0
 Author: Camille K. Sicangco
 Maintainer: <c.sicangco@westernsydney.edu.au>
 Description: Shared functions for adding/mapping species codes and fitting
