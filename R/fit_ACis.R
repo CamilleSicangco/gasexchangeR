@@ -585,8 +585,20 @@ plot_c3_aci_fit_indiv = function(
   # default auto-scaling span Ac/Aj/Ap/Ad too -- Ap in particular can shoot
   # off to a near-vertical asymptote at low Ci, which would otherwise
   # squash the An/Ac/Aj curves into an unreadable sliver.
-  ymin <- min(curve_interpolated$An) - 2
-  ymax <- max(curve_interpolated$An) + 5
+  #
+  # The limits are computed per curve from the finite An values and the
+  # measured A points (so points above the fitted curve aren't clipped).
+  # na.rm / is.finite matter: An can contain NA (and Ad Inf) at some Ci
+  # values, and a plain min()/max() would then return NA, which lattice
+  # silently ignores -- falling back to the auto-scaling this is meant to
+  # avoid.
+  curve_measured_A <-
+    fit_results$fits[fit_results$fits[, identifier_column_name] == identifier_column_val, "A"]
+  y_vals <- c(curve_interpolated$An, curve_measured_A)
+  y_vals <- y_vals[is.finite(y_vals)]
+  y_pad <- max(2, 0.1 * diff(range(y_vals)))
+  ymin <- min(y_vals) - y_pad
+  ymax <- max(y_vals) + y_pad
 
   lattice::xyplot(An + Ac + Aj + Ap + Ad ~ Ci,
                   curve_interpolated,
